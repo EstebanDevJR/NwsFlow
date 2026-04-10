@@ -152,6 +152,8 @@ describe.skipIf(!integration)('Role-based permissions', () => {
         concept: 'Test Payment',
         description: 'Test payment description for permission testing',
         category: 'supplies',
+        paymentMethod: 'BANK',
+        paymentMethodDetail: 'Integration test bank transfer detail',
         requiredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
     expect(res.status).toBe(201);
@@ -201,6 +203,8 @@ describe.skipIf(!integration)('Role-based permissions', () => {
         concept: 'Payment for Approval',
         description: 'Payment to test approval flow',
         category: 'services',
+        paymentMethod: 'BANK',
+        paymentMethodDetail: 'Integration test bank transfer detail',
         requiredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
     const paymentId = createRes.body.id;
@@ -250,6 +254,8 @@ describe.skipIf(!integration)('Role-based permissions', () => {
         concept: 'Payment for Cajero',
         description: 'Payment to test payment flow',
         category: 'expenses',
+        paymentMethod: 'BANK',
+        paymentMethodDetail: 'Integration test bank transfer detail',
         requiredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
     const paymentId = createRes.body.id;
@@ -281,6 +287,8 @@ describe.skipIf(!integration)('Role-based permissions', () => {
         concept: 'Leader Private Payment',
         description: 'Private payment for leader',
         category: 'misc',
+        paymentMethod: 'BANK',
+        paymentMethodDetail: 'Integration test bank transfer detail',
         requiredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
 
@@ -410,6 +418,8 @@ describe.skipIf(!integration)('End-to-End Payment Flow', () => {
         concept: 'E2E Test Payment',
         description: 'Full end-to-end test payment flow',
         category: 'services',
+        paymentMethod: 'BANK',
+        paymentMethodDetail: 'Integration test bank transfer detail',
         requiredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
     expect(createRes.status).toBe(201);
@@ -462,6 +472,8 @@ describe.skipIf(!integration)('End-to-End Payment Flow', () => {
         concept: 'Payment to Reject',
         description: 'This should be rejected for testing',
         category: 'misc',
+        paymentMethod: 'BANK',
+        paymentMethodDetail: 'Integration test bank transfer detail',
         requiredDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       });
     const paymentId = createRes.body.id;
