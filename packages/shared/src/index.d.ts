@@ -1,0 +1,21 @@
+export * from './currency';
+export * from './paymentMethod';
+export declare const config: {
+    jwtSecret: any;
+    jwtRefreshSecret: any;
+    jwtExpiresIn: string;
+    jwtRefreshExpiresIn: string;
+    port: number;
+    databaseUrl: any;
+    frontendUrl: any;
+    telegramBotToken: any;
+    telegramWebhookUrl: any;
+    telegramWebhookSecret: any;
+    uploadDir: any;
+    s3Endpoint: any;
+    s3Region: any;
+    s3AccessKey: any;
+    s3SecretKey: any;
+    s3Bucket: any;
+    s3ForcePathStyle: boolean;
+};
