@@ -1,8 +1,9 @@
 import path from 'path';
 import { Request } from 'express';
 import { getSignedDownloadUrl, isS3Configured, parseS3Uri } from './s3.js';
+import { buildLocalSignedDownloadUrl } from './localUploadSignature.js';
 
-/** Resolve stored paths to a fetchable URL for server-side consumers (e.g. Telegram). Uses API_PUBLIC_URL for local uploads. */
+/** Resolve stored paths to a fetchable URL for server-side consumers (e.g. Telegram). Uses signed URLs for local disk. */
 export async function resolveStoredFileUrlForBot(
   storedPath: string | null | undefined,
   expiresIn = 2 * 60 * 60
@@ -20,9 +21,10 @@ export async function resolveStoredFileUrlForBot(
   }
 
   const base = process.env.API_PUBLIC_URL?.replace(/\/$/, '') || 'http://localhost:3000';
-  if (storedPath.startsWith('/uploads/')) return `${base}${storedPath}`;
-  if (storedPath.startsWith('uploads/')) return `${base}/${storedPath}`;
-  return `${base}/uploads/${path.basename(storedPath)}`;
+  if (storedPath.startsWith('/uploads/') || storedPath.startsWith('uploads/')) {
+    return buildLocalSignedDownloadUrl(storedPath, base, expiresIn);
+  }
+  return buildLocalSignedDownloadUrl(`/uploads/${path.basename(storedPath)}`, base, expiresIn);
 }
 
 export function getPublicBaseUrl(req: Request): string {
@@ -51,7 +53,8 @@ export async function resolveStoredFileUrl(
   }
 
   const base = getPublicBaseUrl(req);
-  if (storedPath.startsWith('/uploads/')) return `${base}${storedPath}`;
-  if (storedPath.startsWith('uploads/')) return `${base}/${storedPath}`;
-  return `${base}/uploads/${path.basename(storedPath)}`;
+  if (storedPath.startsWith('/uploads/') || storedPath.startsWith('uploads/')) {
+    return buildLocalSignedDownloadUrl(storedPath, base, expiresIn);
+  }
+  return buildLocalSignedDownloadUrl(`/uploads/${path.basename(storedPath)}`, base, expiresIn);
 }

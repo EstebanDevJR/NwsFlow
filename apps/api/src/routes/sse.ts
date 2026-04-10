@@ -24,15 +24,7 @@ export function sendSSE(userId: string, event: string, data: unknown) {
   }
 }
 
-function sseTokenFromQuery(req: Request, res: Response, next: () => void) {
-  const t = req.query.token;
-  if (typeof t === 'string' && t.length > 0 && !req.headers.authorization) {
-    req.headers.authorization = `Bearer ${t}`;
-  }
-  next();
-}
-
-router.get('/events', sseTokenFromQuery, authMiddleware, (req: Request, res: Response) => {
+router.get('/events', authMiddleware, (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');

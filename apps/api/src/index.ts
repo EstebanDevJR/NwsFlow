@@ -1,7 +1,7 @@
 import 'dotenv/config';
+import { validateApiEnv } from './config/validateEnv.js';
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
 import fs from 'fs';
 import prisma from '@paymentflow/database';
 import helmet from 'helmet';
@@ -26,8 +26,11 @@ import { processSlaRules } from './services/slaProcessor.js';
 import { auditMiddleware } from './middleware/audit.js';
 import telegramRoutes from './routes/telegram.js';
 import chatRoutes from './routes/chat.js';
+import filesRoutes from './routes/files.js';
 import { logger, requestLogger } from './lib/logger.js';
 import { initWorkers, closeWorkers } from './services/workers.js';
+
+validateApiEnv();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -67,13 +70,10 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
-app.use('/uploads', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-}, express.static(path.resolve(uploadDir)));
-
 app.use(compositeRateLimiter);
+
+/** Local files: time-limited HMAC URLs only (no public static /uploads). */
+app.use('/api/files', filesRoutes);
 
 app.get('/api/health', async (_req, res) => {
   if (!process.env.DATABASE_URL) {

@@ -47,12 +47,13 @@ services:
       DATABASE_URL: postgresql://${DB_USER:-paymentflow}:${DB_PASSWORD:-change_me_in_production}@postgres:5432/${DB_NAME:-paymentflow}
       REDIS_URL: redis://redis:6379
       BULLMQ_REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:-dev-secret}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-minimum-32-characters-long!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret-min-32chars-different!!}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3000}
       BOT_INTERNAL_TOKEN: ${BOT_INTERNAL_TOKEN:-dev-bot-token-change-in-production}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-dev-telegram-webhook-secret-32chars!!}
       ALLOW_PUBLIC_REGISTRATION: ${ALLOW_PUBLIC_REGISTRATION:-true}
       LOG_LEVEL: ${LOG_LEVEL:-debug}
       RESEND_API_KEY: ${RESEND_API_KEY:-}

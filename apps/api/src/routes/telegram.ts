@@ -9,6 +9,7 @@ import redis from '../lib/redis.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/auth.js';
 import type { CurrencyCode } from '@paymentflow/shared';
+import { isBotClientIpAllowed } from '../lib/botIpAllowlist.js';
 
 const router = Router();
 
@@ -57,8 +58,13 @@ async function getHolderByTelegramId(telegramId: string) {
 }
 
 function assertBotToken(req: any) {
-  const configured = process.env.BOT_INTERNAL_TOKEN;
-  if (!configured) return;
+  if (!isBotClientIpAllowed(req)) {
+    throw createError('Forbidden', 403);
+  }
+  const configured = process.env.BOT_INTERNAL_TOKEN?.trim();
+  if (!configured) {
+    throw createError('Bot internal authentication is not configured', 503);
+  }
   const incoming = req.get('x-bot-token');
   if (incoming !== configured) {
     throw createError('Invalid bot token', 403);
@@ -246,11 +252,14 @@ router.post('/bot/resolve', async (req, res, next) => {
 
 router.post('/webhook', async (req, res, next) => {
   try {
-    const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
     const incomingSecret = req.get('x-telegram-bot-api-secret-token');
 
-    if (secret && incomingSecret !== secret) {
-      throw createError('Invalid Telegram webhook signature', 403);
+    if (!secret) {
+      throw createError('Telegram webhook secret is not configured', 503);
+    }
+    if (incomingSecret !== secret) {
+      throw createError('Invalid Telegram webhook secret', 403);
     }
 
     const update = req.body as any;

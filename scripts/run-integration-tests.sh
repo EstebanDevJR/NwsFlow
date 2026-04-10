@@ -6,6 +6,10 @@ COMPOSE_FILE="$ROOT_DIR/docker-compose.test.yml"
 
 export DATABASE_URL="${DATABASE_URL:-postgresql://paymentflow:paymentflow@localhost:55432/paymentflow_test?schema=public}"
 export REDIS_URL="${REDIS_URL:-redis://localhost:56379}"
+export JWT_SECRET="${JWT_SECRET:-test-jwt-secret-minimum-32-characters-long!!}"
+export JWT_REFRESH_SECRET="${JWT_REFRESH_SECRET:-test-refresh-secret-min-32chars-different!!}"
+export BOT_INTERNAL_TOKEN="${BOT_INTERNAL_TOKEN:-test-bot-internal-token-min-32-chars!!}"
+export TELEGRAM_WEBHOOK_SECRET="${TELEGRAM_WEBHOOK_SECRET:-test-telegram-webhook-secret-32chars!!}"
 export RUN_INTEGRATION=true
 export TEST_HOLDER_EMAIL="${TEST_HOLDER_EMAIL:-admin@paymentflow.com}"
 export TEST_HOLDER_PASSWORD="${TEST_HOLDER_PASSWORD:-password123}"

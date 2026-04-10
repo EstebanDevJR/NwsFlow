@@ -78,7 +78,6 @@ export function Chat() {
   const [clearingChat, setClearingChat] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
   const listEndRef = useRef<HTMLDivElement>(null);
-  const eventSourceRef = useRef<EventSource | null>(null);
 
   const selected = conversations.find((c) => c.id === selectedId);
 
@@ -163,47 +162,88 @@ export function Chat() {
     const token = api.getToken();
     if (!token) return;
 
-    const url = `${API_BASE}/sse/events?token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
-    eventSourceRef.current = es;
+    const ac = new AbortController();
+    let cancelled = false;
 
-    es.addEventListener('chat_message', (ev) => {
-      try {
-        const data = JSON.parse((ev as MessageEvent).data) as {
-          conversationId: string;
-          message: ChatMessage;
-        };
-        void loadConversations();
-        if (data.conversationId === selectedId) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === data.message.id)) return prev;
-            return [...prev, data.message];
-          });
-          if (user && data.message.senderId !== user.id) {
-            void markRead(data.conversationId);
+    const handleSseEvent = (eventName: string, rawData: string) => {
+      if (eventName === 'chat_message') {
+        try {
+          const data = JSON.parse(rawData) as {
+            conversationId: string;
+            message: ChatMessage;
+          };
+          void loadConversations();
+          if (data.conversationId === selectedId) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === data.message.id)) return prev;
+              return [...prev, data.message];
+            });
+            if (user && data.message.senderId !== user.id) {
+              void markRead(data.conversationId);
+            }
           }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
+        return;
       }
-    });
-
-    es.addEventListener('chat_cleared', (ev) => {
-      try {
-        const data = JSON.parse((ev as MessageEvent).data) as { conversationId: string };
-        void loadConversations();
-        if (data.conversationId === selectedId) {
-          setMessages([]);
-          setNextCursor(null);
+      if (eventName === 'chat_cleared') {
+        try {
+          const data = JSON.parse(rawData) as { conversationId: string };
+          void loadConversations();
+          if (data.conversationId === selectedId) {
+            setMessages([]);
+            setNextCursor(null);
+          }
+        } catch {
+          /* ignore */
         }
-      } catch {
-        /* ignore */
       }
-    });
+    };
 
+    const runStream = async () => {
+      while (!cancelled) {
+        try {
+          const res = await fetch(`${API_BASE}/sse/events`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: ac.signal,
+          });
+          if (!res.ok || !res.body) {
+            await new Promise((r) => setTimeout(r, 3000));
+            continue;
+          }
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let eventName = 'message';
+          const reader = res.body.getReader();
+          while (!cancelled) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let idx: number;
+            while ((idx = buffer.indexOf('\n\n')) !== -1) {
+              const block = buffer.slice(0, idx);
+              buffer = buffer.slice(idx + 2);
+              let dataLine = '';
+              for (const line of block.split('\n')) {
+                if (line.startsWith('event:')) eventName = line.slice(6).trim();
+                else if (line.startsWith('data:')) dataLine += line.slice(5).trim();
+              }
+              if (dataLine) handleSseEvent(eventName, dataLine);
+              eventName = 'message';
+            }
+          }
+        } catch {
+          if (cancelled || ac.signal.aborted) break;
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+    };
+
+    void runStream();
     return () => {
-      es.close();
-      eventSourceRef.current = null;
+      cancelled = true;
+      ac.abort();
     };
   }, [loadConversations, markRead, selectedId, user]);
 
