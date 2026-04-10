@@ -1,0 +1,12 @@
+> docker compose -f docker-compose.dev.yml up -d
+
+WARN[0000] /Users/estebanortizrestrepo/Documents/NwsFlow/docker-compose.dev.yml: the attribute `version` is obsolete, it will be ignored, please remove it 
+WARN[0000] /Users/estebanortizrestrepo/Documents/NwsFlow/docker-compose.dev.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion 
+[+] up 13/13
+ ✔ Image node:22-alpine                    Pulled                                                                                                     6.9ss
+ ✔ Network nwsflow_paymentflow_dev_network Created                                                                                                    0.0ss
+ ✔ Volume nwsflow_uploads_dev              Created                                                                                                    0.0ss
+ ✔ Volume nwsflow_postgres_data_dev        Created                                                                                            0.0ss
+ ✔ Container paymentflow_db_dev            Healthy                                                                                                    10.8s
+ ✔ Container paymentflow_api_dev           Started                                                                                                    12.8s
+ ✔ Container paymentflow_telegram_bot_dev  Started                                                                                                    12.9s

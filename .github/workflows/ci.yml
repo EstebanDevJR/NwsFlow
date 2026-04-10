@@ -1,0 +1,166 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  test:
+    name: Test Suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run unit tests
+        run: npm run test --workspaces --if-present
+      
+      - name: Run linter
+        run: npm run lint --workspaces --if-present
+
+  integration:
+    name: Integration Tests (Postgres + Redis)
+    runs-on: ubuntu-latest
+    needs: test
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: paymentflow
+          POSTGRES_PASSWORD: paymentflow
+          POSTGRES_DB: paymentflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U paymentflow -d paymentflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://paymentflow:paymentflow@localhost:5432/paymentflow_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      RUN_INTEGRATION: 'true'
+      ALLOW_PUBLIC_REGISTRATION: 'true'
+      TEST_HOLDER_EMAIL: admin@paymentflow.com
+      TEST_HOLDER_PASSWORD: password123
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npm run db:migrate:deploy --workspace=@paymentflow/database
+
+      - name: Seed database
+        run: npm run db:seed --workspace=@paymentflow/database
+
+      - name: Run API integration tests
+        run: npm run --workspace=@paymentflow/api test:integration
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [test, integration]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate Prisma Client
+        run: npm run db:generate --workspaces --if-present
+        
+      - name: Build API
+        run: npm run build --workspace=@paymentflow/api
+        
+      - name: Build Frontend
+        run: npm run build --workspace=@paymentflow/web
+
+  docker:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Build and push API
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runner
+          push: ${{ github.ref == 'refs/heads/main' }}
+          tags: paymentflow/api:${{ github.sha }}
+          cache-from: type=registry,ref=paymentflow/api:latest
+          cache-to: type=inline
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+      - name: Deploy to staging server
+        run: |
+          echo "Deploying to staging..."
+          # Add your deployment commands here
+          # e.g., SSH to staging server and run docker-compose
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: Deploy to production server
+        run: |
+          echo "Deploying to production..."
+          # Add your deployment commands here
+          # e.g., SSH to production server and run docker-compose

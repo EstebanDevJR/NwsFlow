@@ -1,0 +1,138 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: paymentflow_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-paymentflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_in_production}
+      POSTGRES_DB: ${DB_NAME:-paymentflow}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-paymentflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paymentflow_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: paymentflow_redis
+    restart: unless-stopped
+    command: redis-server --appendonly --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paymentflow_network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: paymentflow_api
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${DB_USER:-paymentflow}:${DB_PASSWORD:-change_me_in_production}@postgres:5432/${DB_NAME:-paymentflow}
+      JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_in_production}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3000}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      UPLOAD_DIR: ${UPLOAD_DIR:-uploads}
+      ALLOW_PUBLIC_REGISTRATION: ${ALLOW_PUBLIC_REGISTRATION:-false}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      BOT_INTERNAL_TOKEN: ${BOT_INTERNAL_TOKEN:-}
+      REDIS_URL: redis://redis:6379
+      BULLMQ_REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - paymentflow_network
+    volumes:
+      - uploads:/app/uploads
+
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: paymentflow_telegram_bot
+    restart: unless-stopped
+    command: ["node", "apps/telegram-bot/dist/index.js"]
+    environment:
+      NODE_ENV: production
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BOT_API_URL: ${BOT_API_URL:-http://api:3000/api}
+      BOT_INTERNAL_TOKEN: ${BOT_INTERNAL_TOKEN:-}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - api
+      - redis
+    networks:
+      - paymentflow_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+    container_name: paymentflow_frontend
+    restart: unless-stopped
+    command: ["npx", "serve", "apps/web/dist", "-l", "4173"]
+    ports:
+      - "${FRONTEND_PORT:-4173}:4173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://api:3000/api}
+    depends_on:
+      - api
+    networks:
+      - paymentflow_network
+
+  nginx:
+    image: nginx:alpine
+    container_name: paymentflow_nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "${NGINX_SSL_PORT:-443}:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - uploads:/var/www/html/uploads
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - paymentflow_network
+
+volumes:
+  postgres_data:
+  uploads:
+  redis_data:
+
+networks:
+  paymentflow_network:
+    driver: bridge

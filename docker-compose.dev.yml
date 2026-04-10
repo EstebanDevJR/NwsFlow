@@ -1,0 +1,117 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: paymentflow_db_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-paymentflow}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me_in_production}
+      POSTGRES_DB: ${DB_NAME:-paymentflow}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-paymentflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paymentflow_dev_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: paymentflow_redis_dev
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data_dev:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - paymentflow_dev_network
+
+  api:
+    image: node:22-alpine
+    container_name: paymentflow_api_dev
+    working_dir: /app
+    # migrate deploy aplica migraciones pendientes (p. ej. tablas de chat) antes del servidor
+    command: sh -c "npm install && npm run db:generate && npm run db:migrate:deploy && npm run dev --workspace=@paymentflow/api"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://${DB_USER:-paymentflow}:${DB_PASSWORD:-change_me_in_production}@postgres:5432/${DB_NAME:-paymentflow}
+      REDIS_URL: redis://redis:6379
+      BULLMQ_REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3000}
+      BOT_INTERNAL_TOKEN: ${BOT_INTERNAL_TOKEN:-dev-bot-token-change-in-production}
+      ALLOW_PUBLIC_REGISTRATION: ${ALLOW_PUBLIC_REGISTRATION:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - uploads_dev:/app/uploads
+    networks:
+      - paymentflow_dev_network
+
+  web:
+    image: node:22-alpine
+    container_name: paymentflow_web_dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev --workspace=@paymentflow/web"
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - api
+    volumes:
+      - .:/app
+    networks:
+      - paymentflow_dev_network
+
+  telegram-bot:
+    image: node:22-alpine
+    container_name: paymentflow_telegram_bot_dev
+    working_dir: /app
+    command: sh -c "npm install && npm run dev --workspace=@paymentflow/telegram-bot"
+    environment:
+      NODE_ENV: development
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BOT_API_URL: ${BOT_API_URL:-http://api:3000/api}
+      BOT_INTERNAL_TOKEN: ${BOT_INTERNAL_TOKEN:-dev-bot-token-change-in-production}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - api
+      - redis
+    volumes:
+      - .:/app
+    networks:
+      - paymentflow_dev_network
+
+volumes:
+  postgres_data_dev:
+  uploads_dev:
+  redis_data_dev:
+
+networks:
+  paymentflow_dev_network:
+    driver: bridge
