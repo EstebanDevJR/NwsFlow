@@ -3,10 +3,14 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { config } from '@paymentflow/shared';
 export const generateAccessToken = (payload) => {
-    return jwt.sign(payload, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+    return jwt.sign(payload, config.jwtSecret, {
+        expiresIn: config.jwtExpiresIn,
+    });
 };
 export const generateRefreshToken = (payload) => {
-    return jwt.sign(payload, config.jwtRefreshSecret, { expiresIn: config.jwtRefreshExpiresIn });
+    return jwt.sign(payload, config.jwtRefreshSecret, {
+        expiresIn: config.jwtRefreshExpiresIn,
+    });
 };
 export const verifyAccessToken = (token) => {
     try {
