@@ -31,7 +31,7 @@ export function parseS3Uri(uri: string): { bucket: string; key: string } | null 
 
 export async function uploadFile(
   key: string,
-  body: Buffer | ReadableStream,
+  body: Buffer,
   contentType: string,
   bucket = BUCKET
 ): Promise<string> {

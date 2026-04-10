@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import pino from 'pino';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -22,7 +23,7 @@ export const logger = pino({
 
 export function requestLogger(req: any, res: any, next: any) {
   const start = Date.now();
-  const requestId = crypto.randomUUID();
+  const requestId = randomUUID();
   req.requestId = requestId;
 
   logger.info(

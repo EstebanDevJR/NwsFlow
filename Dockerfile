@@ -2,18 +2,22 @@ FROM node:22-alpine AS base
 
 FROM base AS deps
 WORKDIR /app
+# Instalar devDependencies (types, prisma) para compilar; el stage runner solo copia artefactos.
+ENV NODE_ENV=development
 COPY package.json package-lock.json* ./
 COPY apps/*/package.json apps/
 COPY packages/*/package.json packages/
-RUN npm install
+RUN npm ci
 
 FROM base AS builder
 WORKDIR /app
 # URL pública de la API (con /api) inyectada en el bundle del front (obligatorio en producción).
 ARG VITE_API_URL=http://localhost/api
 ENV VITE_API_URL=$VITE_API_URL
+ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN npm run db:generate --workspace=@paymentflow/database
 RUN npm run build --workspace=@paymentflow/api
 RUN npm run build --workspace=@paymentflow/web || true
 RUN cd apps/web && npm run build || true
