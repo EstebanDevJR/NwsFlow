@@ -81,7 +81,7 @@ services:
       target: runner
     container_name: paymentflow_telegram_bot
     restart: unless-stopped
-    command: ["node", "apps/telegram-bot/dist/index.js"]
+    command: ["node", "apps/telegram-bot/dist/apps/telegram-bot/src/index.js"]
     environment:
       NODE_ENV: production
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
