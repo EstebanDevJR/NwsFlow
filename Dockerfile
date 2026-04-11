@@ -40,9 +40,8 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
 COPY --from=builder /app/apps/web/package.json ./apps/web/package.json
-COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
-COPY --from=builder /app/packages/database/package.json ./packages/database/package.json
-COPY --from=builder /app/packages/database/src ./packages/database/src
+# Workspace links en node_modules/@paymentflow/* apuntan a packages/*; sin esto los symlinks quedan rotos.
+COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/apps/web/vite.config.ts ./apps/web/vite.config.ts
 COPY --from=builder /app/apps/web/index.html ./apps/web/index.html
 COPY scripts/docker-api-entrypoint.sh ./scripts/docker-api-entrypoint.sh

@@ -1,5 +1,5 @@
-export * from './currency';
-export * from './paymentMethod';
+export * from './currency.js';
+export * from './paymentMethod.js';
 export * from './secrets.js';
 
 import { getJwtSecret, getJwtRefreshSecret, isTestEnv } from './secrets.js';
