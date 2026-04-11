@@ -21,6 +21,7 @@ COPY . .
 RUN npm install --prefer-offline --no-audit
 RUN npm run db:generate --workspace=@paymentflow/database
 RUN npm run build --workspace=@paymentflow/api
+RUN npm run build --workspace=@paymentflow/telegram-bot
 RUN npm run build --workspace=@paymentflow/web || true
 RUN cd apps/web && npm run build || true
 
