@@ -23,14 +23,17 @@ services:
     image: redis:7-alpine
     container_name: paymentflow_redis_prod
     restart: unless-stopped
-    command: redis-server --appendonly --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # En droplets con poca RAM, baja maxmemory (ej. 64mb) si Redis no arranca.
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      # start_period: Redis + AOF en disco pueden tardar en droplets lentos o con I/O limitado
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "ping"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 12
+      start_period: 60s
     networks:
       - paymentflow_network
 

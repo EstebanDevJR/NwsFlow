@@ -23,7 +23,7 @@ services:
     image: redis:7-alpine
     container_name: paymentflow_redis
     restart: unless-stopped
-    command: redis-server --appendonly --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     healthcheck:
