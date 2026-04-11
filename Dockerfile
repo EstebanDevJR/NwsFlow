@@ -17,6 +17,8 @@ ENV VITE_API_URL=$VITE_API_URL
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Con el árbol de código completo, enlazar dependencias del workspace (npm ci en deps solo ve package.json).
+RUN npm install --prefer-offline --no-audit
 RUN npm run db:generate --workspace=@paymentflow/database
 RUN npm run build --workspace=@paymentflow/api
 RUN npm run build --workspace=@paymentflow/web || true
