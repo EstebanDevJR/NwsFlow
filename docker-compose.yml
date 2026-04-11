@@ -101,7 +101,7 @@ services:
       target: runner
     container_name: paymentflow_frontend
     restart: unless-stopped
-    command: ["npx", "serve", "apps/web/dist", "-l", "4173"]
+    command: ["npx", "serve", "-s", "apps/web/dist", "-l", "4173"]
     ports:
       - "${FRONTEND_PORT:-4173}:4173"
     environment:
