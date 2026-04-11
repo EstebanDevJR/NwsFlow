@@ -192,3 +192,27 @@ docker compose -f docker-compose.prod.yml exec api npx prisma migrate deploy --s
 docker compose -f docker-compose.prod.yml pull   # si usas imágenes preconstruidas
 docker compose -f docker-compose.prod.yml down
 ```
+
+### 8.8 Build falla en el droplet (`npm run build` / `tsc`)
+
+Compilar la imagen (`npm ci`, `tsc`, Vite) puede usar **más de 1–2 GB de RAM**. En droplets pequeños (512 MB / 1 GB) el proceso puede morir o `tsc` puede fallar sin mostrar el error completo en el resumen de Docker.
+
+1. **Ver el error real de TypeScript** (salida completa):
+
+```bash
+cd ~/NwsFlow
+docker compose -f docker-compose.prod.yml build --no-cache --progress=plain api 2>&1 | tee /tmp/docker-build.log
+```
+
+Revisa `/tmp/docker-build.log` buscando líneas `error TS`.
+
+2. **Poca RAM / OOM**: añade **swap** (ej. 2 GB) y vuelve a construir:
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+3. **Alternativa recomendada**: construir la imagen en **GitHub Actions** (u otro CI), subirla al registry y en el droplet solo `docker compose pull` + `up`, sin compilar en el servidor.

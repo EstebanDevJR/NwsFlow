@@ -20,7 +20,9 @@ COPY . .
 # Con el árbol de código completo, enlazar dependencias del workspace (npm ci en deps solo ve package.json).
 RUN npm install --prefer-offline --no-audit
 RUN npm run db:generate --workspace=@paymentflow/database
-RUN npm run build --workspace=@paymentflow/api && test -f apps/api/dist/index.js
+# Capas separadas: si falla, el log muestra solo errores de tsc o solo el listado de dist.
+RUN npm run build --workspace=@paymentflow/api
+RUN ls -la apps/api/dist/ && test -f apps/api/dist/index.js
 RUN npm run build --workspace=@paymentflow/telegram-bot
 RUN npm run build --workspace=@paymentflow/web || true
 RUN cd apps/web && npm run build || true
