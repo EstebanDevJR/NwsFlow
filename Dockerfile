@@ -20,7 +20,7 @@ COPY . .
 # Con el árbol de código completo, enlazar dependencias del workspace (npm ci en deps solo ve package.json).
 RUN npm install --prefer-offline --no-audit
 RUN npm run db:generate --workspace=@paymentflow/database
-RUN npm run build --workspace=@paymentflow/api
+RUN npm run build --workspace=@paymentflow/api && test -f apps/api/dist/index.js
 RUN npm run build --workspace=@paymentflow/telegram-bot
 RUN npm run build --workspace=@paymentflow/web || true
 RUN cd apps/web && npm run build || true
@@ -32,6 +32,7 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nodejs
 RUN npm install -g serve
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+RUN test -f apps/api/dist/index.js || (echo "API dist missing in runner image" && ls -la apps/api/ && exit 1)
 COPY --from=builder /app/apps/telegram-bot/dist ./apps/telegram-bot/dist
 COPY --from=builder /app/apps/web/dist ./apps/web/dist
 COPY --from=builder /app/node_modules ./node_modules
