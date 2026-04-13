@@ -249,36 +249,57 @@ router.get('/', async (req, res, next) => {
 
 router.get('/stats', requireRole('HOLDER'), async (req, res, next) => {
   try {
-    const [total, pending, approved, rejected] = await Promise.all([
-      prisma.paymentRequest.count(),
-      prisma.paymentRequest.count({ where: { status: 'PENDING' } }),
-      prisma.paymentRequest.count({ where: { status: 'APPROVED' } }),
-      prisma.paymentRequest.count({ where: { status: 'REJECTED' } }),
+    type StatsRow = {
+      total: number;
+      pending: number;
+      approved: number;
+      rejected: number;
+      total_approved_amount: string | number;
+    };
+    type CurrencyRow = {
+      currency: string;
+      amount: string | number;
+    };
+
+    const [statsRows, approvedByCurrency] = await Promise.all([
+      prisma.$queryRaw<StatsRow[]>`
+        SELECT
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE "status"::text = 'PENDING')::int AS pending,
+          COUNT(*) FILTER (WHERE "status"::text = 'APPROVED')::int AS approved,
+          COUNT(*) FILTER (WHERE "status"::text = 'REJECTED')::int AS rejected,
+          COALESCE(SUM(CASE WHEN "status"::text = 'APPROVED' THEN "amount" ELSE 0 END), 0) AS total_approved_amount
+        FROM "PaymentRequest"
+      `,
+      prisma.$queryRaw<CurrencyRow[]>`
+        SELECT
+          "currency"::text AS currency,
+          COALESCE(SUM("amount"), 0) AS amount
+        FROM "PaymentRequest"
+        WHERE "status"::text = 'APPROVED'
+        GROUP BY "currency"
+      `,
     ]);
 
-    const [totalAmount, approvedByCurrency] = await Promise.all([
-      prisma.paymentRequest.aggregate({
-        where: { status: 'APPROVED' },
-        _sum: { amount: true },
-      }),
-      prisma.paymentRequest.groupBy({
-        by: ['currency'],
-        where: { status: 'APPROVED' },
-        _sum: { amount: true },
-      }),
-    ]);
+    const stats = statsRows[0] ?? {
+      total: 0,
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      total_approved_amount: 0,
+    };
 
     const totalApprovedByCurrency: Record<string, number> = {};
     for (const row of approvedByCurrency) {
-      totalApprovedByCurrency[row.currency] = Number(row._sum.amount ?? 0);
+      totalApprovedByCurrency[row.currency] = Number(row.amount ?? 0);
     }
 
     res.json({
-      total,
-      pending,
-      approved,
-      rejected,
-      totalApprovedAmount: Number(totalAmount._sum.amount ?? 0),
+      total: stats.total,
+      pending: stats.pending,
+      approved: stats.approved,
+      rejected: stats.rejected,
+      totalApprovedAmount: Number(stats.total_approved_amount ?? 0),
       totalApprovedByCurrency,
     });
   } catch (err) {
