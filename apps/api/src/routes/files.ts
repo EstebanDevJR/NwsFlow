@@ -2,6 +2,7 @@ import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
 import { verifyLocalUploadUrl } from '../lib/localUploadSignature.js';
+import { firstQueryParam } from '../lib/publicOrigin.js';
 
 const router = Router();
 
@@ -19,9 +20,9 @@ const MIME: Record<string, string> = {
 };
 
 router.get('/local', (req, res) => {
-  const f = String(req.query.f || '');
-  const exp = parseInt(String(req.query.exp || ''), 10);
-  const sig = String(req.query.sig || '');
+  const f = firstQueryParam(req.query.f).trim();
+  const exp = parseInt(firstQueryParam(req.query.exp), 10);
+  const sig = firstQueryParam(req.query.sig).trim();
 
   if (f.includes('..') || f.includes('/') || f.includes('\\')) {
     return res.status(400).json({ error: 'Invalid file parameter' });

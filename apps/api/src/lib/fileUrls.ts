@@ -2,6 +2,7 @@ import path from 'path';
 import { Request } from 'express';
 import { getSignedDownloadUrl, isS3Configured, parseS3Uri } from './s3.js';
 import { buildLocalSignedDownloadUrl } from './localUploadSignature.js';
+import { normalizeApiPublicOrigin } from './publicOrigin.js';
 
 /** Resolve stored paths to a fetchable URL for server-side consumers (e.g. Telegram). Uses signed URLs for local disk. */
 export async function resolveStoredFileUrlForBot(
@@ -20,7 +21,7 @@ export async function resolveStoredFileUrlForBot(
     return getSignedDownloadUrl(parsed.key, expiresIn, parsed.bucket);
   }
 
-  const base = process.env.API_PUBLIC_URL?.replace(/\/$/, '') || 'http://localhost:3000';
+  const base = normalizeApiPublicOrigin(process.env.API_PUBLIC_URL) || 'http://localhost:3000';
   if (storedPath.startsWith('/uploads/') || storedPath.startsWith('uploads/')) {
     return buildLocalSignedDownloadUrl(storedPath, base, expiresIn);
   }
@@ -28,9 +29,9 @@ export async function resolveStoredFileUrlForBot(
 }
 
 export function getPublicBaseUrl(req: Request): string {
-  const fromEnv = process.env.API_PUBLIC_URL?.trim();
+  const fromEnv = normalizeApiPublicOrigin(process.env.API_PUBLIC_URL);
   if (fromEnv) {
-    return fromEnv.replace(/\/$/, '');
+    return fromEnv;
   }
   return `${req.protocol}://${req.get('host')}`;
 }

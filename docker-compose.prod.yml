@@ -60,7 +60,10 @@ services:
       TELEGRAM_WEBHOOK_URL: ${TELEGRAM_WEBHOOK_URL:-}
       TELEGRAM_WEBHOOK_PORT: ${TELEGRAM_WEBHOOK_PORT:-8443}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET}
+      # Origen público sin ruta (no incluyas /api). Si usas https://dominio.com/api, se normaliza al origen.
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost}
+      # Opcional (>=32 chars): firma estable para /api/files/local si rotas JWT_SECRET sin invalidar enlaces.
+      UPLOAD_SIGNING_SECRET: ${UPLOAD_SIGNING_SECRET:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM: ${RESEND_FROM:-}
