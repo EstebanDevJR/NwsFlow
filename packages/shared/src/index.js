@@ -1,12 +1,30 @@
 export * from './currency';
 export * from './paymentMethod';
+export * from './secrets.js';
+import { getJwtSecret, getJwtRefreshSecret, isTestEnv } from './secrets.js';
+function defaultDatabaseUrl() {
+    if (process.env.NODE_ENV === 'production' && !isTestEnv()) {
+        const u = process.env.DATABASE_URL?.trim();
+        if (!u) {
+            throw new Error('DATABASE_URL is required in production.');
+        }
+        return u;
+    }
+    return process.env.DATABASE_URL || 'postgresql://paymentflow:password@localhost:5432/paymentflow';
+}
 export const config = {
-    jwtSecret: process.env.JWT_SECRET || 'your-super-secret-key',
-    jwtRefreshSecret: process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key',
+    get jwtSecret() {
+        return getJwtSecret();
+    },
+    get jwtRefreshSecret() {
+        return getJwtRefreshSecret();
+    },
     jwtExpiresIn: '15m',
     jwtRefreshExpiresIn: '7d',
     port: parseInt(process.env.PORT || '3000'),
-    databaseUrl: process.env.DATABASE_URL || 'postgresql://paymentflow:password@localhost:5432/paymentflow',
+    get databaseUrl() {
+        return defaultDatabaseUrl();
+    },
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
     telegramWebhookUrl: process.env.TELEGRAM_WEBHOOK_URL || '',
