@@ -15,6 +15,11 @@ function defaultDatabaseUrl(): string {
   return process.env.DATABASE_URL || 'postgresql://paymentflow:password@localhost:5432/paymentflow';
 }
 
+function tokenTtlFromEnv(name: 'JWT_EXPIRES_IN' | 'JWT_REFRESH_EXPIRES_IN', fallback: string): string {
+  const value = process.env[name]?.trim();
+  return value && value.length > 0 ? value : fallback;
+}
+
 export const config = {
   get jwtSecret() {
     return getJwtSecret();
@@ -22,8 +27,8 @@ export const config = {
   get jwtRefreshSecret() {
     return getJwtRefreshSecret();
   },
-  jwtExpiresIn: '15m',
-  jwtRefreshExpiresIn: '7d',
+  jwtExpiresIn: tokenTtlFromEnv('JWT_EXPIRES_IN', '8h'),
+  jwtRefreshExpiresIn: tokenTtlFromEnv('JWT_REFRESH_EXPIRES_IN', '7d'),
   port: parseInt(process.env.PORT || '3000'),
   get databaseUrl() {
     return defaultDatabaseUrl();
