@@ -213,7 +213,7 @@ export function Dashboard() {
           {user.role === 'HOLDER'
             ? 'Vista global de solicitudes y métricas del sistema.'
             : user.role === 'CAJERO'
-              ? 'Resumen operativo para ejecutar pagos (sin estadísticas globales).'
+              ? 'Resumen operativo para ejecutar pagos.'
               : 'Aquí tienes el resumen de tu actividad en NWSPayFlow.'}
         </p>
       </div>
@@ -229,7 +229,7 @@ export function Dashboard() {
               <p className="font-medium">No se pudieron cargar las solicitudes</p>
               <p className="mt-1 text-destructive/90">
                 {paymentsQueryError instanceof Error ? paymentsQueryError.message : 'Error de red o del servidor.'}{' '}
-                Revisa que la API esté en marcha y vuelve a intentar.
+                Intenta nuevamente. Si el problema persiste, contacta al administrador.
               </p>
               <button
                 type="button"
