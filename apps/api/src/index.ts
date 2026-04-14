@@ -27,7 +27,6 @@ import { auditMiddleware } from './middleware/audit.js';
 import telegramRoutes from './routes/telegram.js';
 import chatRoutes from './routes/chat.js';
 import filesRoutes from './routes/files.js';
-import adminRoutes from './routes/admin.js';
 import { logger, requestLogger } from './lib/logger.js';
 import { initWorkers, closeWorkers } from './services/workers.js';
 
@@ -211,8 +210,6 @@ app.use('/api/approval-rules', authMiddleware, approvalRulesRoutes);
 app.use('/api/sse', sseRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/sla-rules', authMiddleware, slaRulesRoutes);
-app.use('/api/admin', authMiddleware, adminRoutes);
-
 app.use(errorHandler);
 
 let reminderInterval: NodeJS.Timeout | null = null;
