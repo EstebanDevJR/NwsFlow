@@ -76,7 +76,25 @@ class ApiClient {
     }
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }));
+      const error = (await response.json().catch(() => ({ error: 'Request failed' }))) as {
+        error?: string;
+        message?: string;
+        details?: Array<{ path?: string; message?: string }>;
+      };
+      if (
+        response.status === 400 &&
+        Array.isArray(error.details) &&
+        error.details.length > 0
+      ) {
+        const detailMsg = error.details
+          .map((d) => {
+            const p = d.path?.length ? `${d.path}: ` : '';
+            return `${p}${d.message ?? ''}`;
+          })
+          .filter(Boolean)
+          .join(' · ');
+        throw new Error(detailMsg || error.error || 'Validation failed');
+      }
       const msg =
         typeof error.error === 'string'
           ? error.error

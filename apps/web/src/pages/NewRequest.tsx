@@ -150,12 +150,28 @@ export function NewRequest() {
     setError('');
 
     try {
+      const amountNum = parseFloat(amount.replace(',', '.'));
+      if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        setError('Introduce un monto válido mayor que 0.');
+        return;
+      }
+      const desc = description.trim();
+      const conc = concept.trim();
+      if (conc.length < 3) {
+        setError('El concepto debe tener al menos 3 caracteres.');
+        return;
+      }
+      if (desc.length < 10) {
+        setError('La descripción debe tener al menos 10 caracteres.');
+        return;
+      }
+
       const created = await createRequest({
-        amount: parseFloat(amount),
+        amount: amountNum,
         currency,
-        concept,
-        description,
-        category,
+        concept: conc,
+        description: desc,
+        category: category.trim(),
         paymentMethod,
         paymentMethodDetail: paymentMethodDetail.trim(),
         requiredDate,
@@ -200,6 +216,7 @@ export function NewRequest() {
               <label className="text-sm font-medium">Concepto</label>
               <Input 
                 required 
+                minLength={3}
                 placeholder="Ej: Pago a desarrolladores" 
                 value={concept}
                 onChange={e => setConcept(e.target.value)}
@@ -263,8 +280,9 @@ export function NewRequest() {
               <label className="text-sm font-medium">Descripción y Justificación</label>
               <textarea 
                 required
+                minLength={10}
                 className="flex min-h-[120px] w-full rounded-md border border-input bg-background/50 backdrop-blur-sm px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
-                placeholder="Explica el motivo de este gasto..."
+                placeholder="Explica el motivo de este gasto (mínimo 10 caracteres)..."
                 value={description}
                 onChange={e => setDescription(e.target.value)}
               />

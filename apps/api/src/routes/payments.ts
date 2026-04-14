@@ -12,13 +12,16 @@ import { formatCurrencyAmount, type CurrencyCode } from '@paymentflow/shared';
 const router = Router();
 
 const createPaymentSchema = z.object({
-  amount: z.number().positive(),
+  amount: z.coerce.number().positive({ message: 'El monto debe ser un número mayor que 0' }),
   currency: z.enum(['ROBUX', 'COP', 'USD']).default('COP'),
-  concept: z.string().min(3),
-  description: z.string().min(10),
-  category: z.string().min(1),
+  concept: z.string().trim().min(3, { message: 'El concepto debe tener al menos 3 caracteres' }),
+  description: z
+    .string()
+    .trim()
+    .min(10, { message: 'La descripción debe tener al menos 10 caracteres' }),
+  category: z.string().trim().min(1, { message: 'Indica una categoría' }),
   paymentMethod: z.enum(['BANK', 'ROBLOX', 'PAYPAL']),
-  paymentMethodDetail: z.string().min(3).max(4000),
+  paymentMethodDetail: z.string().trim().min(3).max(4000),
   requiredDate: z.string().transform((val) => {
     const date = new Date(val);
     if (isNaN(date.getTime())) {
