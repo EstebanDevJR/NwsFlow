@@ -6,17 +6,38 @@ import prisma from '@paymentflow/database';
 import { createError } from '../middleware/errorHandler.js';
 import { sendTelegramNotification } from '../services/telegram.js';
 import { addTelegramJob, addInAppNotificationJob } from '../services/queue.js';
-import { resolveStoredFileUrlForBot } from '../lib/fileUrls.js';
 import redis from '../lib/redis.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/auth.js';
-import type { CurrencyCode } from '@paymentflow/shared';
+import { config, type CurrencyCode } from '@paymentflow/shared';
 import { isBotClientIpAllowed } from '../lib/botIpAllowlist.js';
 import { getSignedDownloadUrl, isS3Configured, parseS3Uri } from '../lib/s3.js';
+import { normalizeApiPublicOrigin } from '../lib/publicOrigin.js';
 
 const router = Router();
 
 const uploadDir = process.env.UPLOAD_DIR || 'uploads';
+
+/** URL que el usuario puede abrir en el navegador (Telegram no abre bien /api/files/local firmadas). */
+function holderWebAppApprovalsUrl(): string | null {
+  const origin = normalizeApiPublicOrigin(process.env.FRONTEND_URL?.trim() || config.frontendUrl);
+  if (!origin) return null;
+  return `${origin}/approvals`;
+}
+
+/** Enlace alternativo para clientes Telegram: S3/HTTP sí; disco local no (el bot descarga por /bot/evidence/.../file). */
+async function resolveTelegramClientAlternateUrl(storedPath: string | null | undefined): Promise<string | null> {
+  if (!storedPath) return null;
+  if (storedPath.startsWith('http://') || storedPath.startsWith('https://')) {
+    return storedPath;
+  }
+  const parsed = parseS3Uri(storedPath);
+  if (parsed) {
+    if (!isS3Configured()) return null;
+    return getSignedDownloadUrl(parsed.key, 2 * 60 * 60, parsed.bucket);
+  }
+  return null;
+}
 
 function localDiskAbsoluteForBot(storedPath: string): string {
   if (storedPath.startsWith('/uploads/')) {
@@ -607,7 +628,7 @@ router.get('/bot/payments/:id/detail', async (req, res, next) => {
         filename: ev.filename,
         mimetype: ev.mimetype,
         size: ev.size,
-        url: await resolveStoredFileUrlForBot(ev.filepath),
+        url: await resolveTelegramClientAlternateUrl(ev.filepath),
       }))
     );
 
@@ -623,6 +644,7 @@ router.get('/bot/payments/:id/detail', async (req, res, next) => {
       requiredDate: payment.requiredDate,
       status: payment.status,
       user: payment.user,
+      webAppUrl: holderWebAppApprovalsUrl(),
       evidences,
     });
   } catch (err) {

@@ -72,13 +72,16 @@ async function apiRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-/** Descarga binario con token del bot (Telegram no puede usar URLs firmadas sin fallos de HMAC). */
+/** Descarga binario con token del bot (mejor que URLs firmadas: Telegram rompe a menudo los `&` en enlaces HTML). */
 async function fetchEvidenceFileBuffer(evidenceId: string): Promise<Buffer | null> {
   if (!botToken) return null;
   const res = await fetch(`${apiUrl}/telegram/bot/evidence/${encodeURIComponent(evidenceId)}/file`, {
     headers: { 'x-bot-token': botToken },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    console.warn(`[telegram-bot] evidence file ${evidenceId}: API ${res.status} ${res.statusText}`);
+    return null;
+  }
   return Buffer.from(await res.arrayBuffer());
 }
 
@@ -335,6 +338,8 @@ type PaymentDetail = {
   requiredDate: string;
   status: string;
   user: { name: string };
+  /** Aprobaciones en la web (adjuntos se ven ahí si el bot no puede descargarlos). */
+  webAppUrl?: string | null;
   evidences: Array<{ id: string; filename: string; mimetype: string; size: number; url: string | null }>;
 };
 
@@ -377,13 +382,17 @@ async function sendPaymentDetail(ctx: Context, id: string) {
     const cap = `${escapeHtml(ev.filename)} · ${escapeHtml(ev.mimetype)}`;
     const buf = await fetchEvidenceFileBuffer(ev.id);
     if (!buf || buf.length === 0) {
-      const linkHint = ev.url
-        ? `\n<a href="${escapeHtml(ev.url)}">Enlace alternativo</a>`
+      const webHint = d.webAppUrl
+        ? `\n<i>Adjuntos:</i> <a href="${escapeHtml(d.webAppUrl)}">Abrir aprobaciones en la web</a>`
         : '';
       await ctx.reply(
-        `📎 <b>${escapeHtml(ev.filename)}</b>\n<i>No se pudo descargar el archivo desde la API.${linkHint}</i>`,
+        `📎 <b>${escapeHtml(ev.filename)}</b>\n<i>No se pudo descargar el archivo desde la API.</i>${webHint}`,
         { parse_mode: 'HTML' }
       );
+      // Enlaces con muchos query params fallan en &lt;a href&gt; por entidades &amp; en clientes Telegram; mensaje aparte sin HTML.
+      if (ev.url) {
+        await ctx.reply(`Enlace directo (abre en el navegador):\n${ev.url}`);
+      }
       continue;
     }
     if (ev.mimetype.startsWith('image/')) {
