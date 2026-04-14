@@ -7,7 +7,7 @@ import { requireRole } from '../middleware/auth.js';
 import { createError } from '../middleware/errorHandler.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { addTelegramJob, addInAppNotificationJob } from '../services/queue.js';
-import { uploadFile, deleteFile, isS3Configured, parseS3Uri } from '../lib/s3.js';
+import { uploadFile, deleteFile, isS3Configured, parseS3Uri, getSignedDownloadUrl } from '../lib/s3.js';
 import { getPublicBaseUrl, resolveStoredFileUrl } from '../lib/fileUrls.js';
 
 const router = Router();
@@ -333,6 +333,53 @@ router.get('/evidence/:id/url', async (req, res, next) => {
     const url = await resolveStoredFileUrl(evidence.filepath, req, 2 * 60 * 60);
     if (!url) throw createError('Unable to resolve evidence URL', 500);
     res.json({ url, expiresIn: 2 * 60 * 60 });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Archivo binario con sesión (Bearer). Las etiquetas &lt;img&gt; no envían Authorization; el front usa este endpoint. */
+router.get('/evidence/:id/file', async (req, res, next) => {
+  try {
+    const evidence = await prisma.evidence.findUnique({
+      where: { id: req.params.id },
+      include: { paymentRequest: true },
+    });
+    if (!evidence) throw createError('Evidence not found', 404);
+
+    await assertPaymentEvidenceAccess(
+      evidence.paymentRequestId,
+      req.user!.userId,
+      req.user!.role,
+      false
+    );
+
+    const s3 = parseS3Uri(evidence.filepath);
+    if (s3) {
+      if (!isS3Configured()) throw createError('Storage not configured', 500);
+      const signed = await getSignedDownloadUrl(s3.key, 3600, s3.bucket);
+      return res.redirect(302, signed);
+    }
+
+    const abs = localDiskAbsolute(evidence.filepath);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      throw createError('File not found', 404);
+    }
+
+    const ext = path.extname(path.basename(evidence.filepath)).toLowerCase();
+    const mimeFromExt: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+    };
+    const ct = evidence.mimetype || mimeFromExt[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    return res.sendFile(path.resolve(abs));
   } catch (err) {
     next(err);
   }

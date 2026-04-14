@@ -228,7 +228,7 @@ export function Approvals() {
 
       {evidencePreview && previewCurrent && (
         <ImageModal
-          url={previewCurrent.url || previewCurrent.filepath}
+          evidenceId={previewCurrent.id}
           mimeType={previewCurrent.mimetype}
           onClose={() => setEvidencePreview(null)}
           footerSlot={

@@ -17,7 +17,9 @@ import { formatCurrencyAmount, paymentMethodLabel, type CurrencyCode } from '@pa
 
 export function ExecutedPayments() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [preview, setPreview] = useState<{ url: string; mimeType?: string } | null>(null);
+  const [preview, setPreview] = useState<
+    { evidenceId: string; mimeType?: string } | { url: string; mimeType?: string } | null
+  >(null);
   const [filters, setFilters] = useState<PaymentListFilters>(() => defaultPaymentFilters());
   const [page, setPage] = useState(1);
   const limit = 25;
@@ -120,7 +122,7 @@ export function ExecutedPayments() {
                           <button
                             onClick={() =>
                               setPreview({
-                                url: req.evidences![0].url || req.evidences![0].filepath,
+                                evidenceId: req.evidences![0].id,
                                 mimeType: req.evidences![0].mimetype,
                               })
                             }
@@ -160,7 +162,12 @@ export function ExecutedPayments() {
       <PaymentPagination page={page} totalPages={totalPages} total={total} onPageChange={setPage} />
 
       {preview && (
-        <ImageModal url={preview.url} mimeType={preview.mimeType} onClose={() => setPreview(null)} />
+        <ImageModal
+          {...('evidenceId' in preview
+            ? { evidenceId: preview.evidenceId, mimeType: preview.mimeType }
+            : { url: preview.url, mimeType: preview.mimeType })}
+          onClose={() => setPreview(null)}
+        />
       )}
     </div>
   );

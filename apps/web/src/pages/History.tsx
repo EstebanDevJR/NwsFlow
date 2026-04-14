@@ -22,7 +22,7 @@ export function History() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState<PaymentListFilters>(() => defaultPaymentFilters());
   const [page, setPage] = useState(1);
-  const [preview, setPreview] = useState<{ url: string; mimeType?: string } | null>(null);
+  const [preview, setPreview] = useState<{ evidenceId: string; mimeType?: string } | null>(null);
   const limit = 20;
   const qDebounced = useDebouncedValue(filters.q, 400);
 
@@ -156,7 +156,7 @@ export function History() {
                           <button
                             onClick={() =>
                               setPreview({
-                                url: req.evidences![0].url || req.evidences![0].filepath,
+                                evidenceId: req.evidences![0].id,
                                 mimeType: req.evidences![0].mimetype,
                               })
                             }
@@ -188,7 +188,7 @@ export function History() {
       <PaymentPagination page={page} totalPages={totalPages} total={total} onPageChange={setPage} />
 
       {preview && (
-        <ImageModal url={preview.url} mimeType={preview.mimeType} onClose={() => setPreview(null)} />
+        <ImageModal evidenceId={preview.evidenceId} mimeType={preview.mimeType} onClose={() => setPreview(null)} />
       )}
     </div>
   );
