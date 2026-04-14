@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { randomBytes } from 'crypto';
+import path from 'path';
+import fs from 'fs';
 import prisma from '@paymentflow/database';
 import { createError } from '../middleware/errorHandler.js';
 import { sendTelegramNotification } from '../services/telegram.js';
@@ -10,8 +12,24 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/auth.js';
 import type { CurrencyCode } from '@paymentflow/shared';
 import { isBotClientIpAllowed } from '../lib/botIpAllowlist.js';
+import { getSignedDownloadUrl, isS3Configured, parseS3Uri } from '../lib/s3.js';
 
 const router = Router();
+
+const uploadDir = process.env.UPLOAD_DIR || 'uploads';
+
+function localDiskAbsoluteForBot(storedPath: string): string {
+  if (storedPath.startsWith('/uploads/')) {
+    return path.join(uploadDir, path.basename(storedPath));
+  }
+  if (storedPath.startsWith('uploads/')) {
+    return path.join(uploadDir, path.basename(storedPath));
+  }
+  if (fs.existsSync(storedPath)) {
+    return storedPath;
+  }
+  return path.join(uploadDir, path.basename(storedPath));
+}
 
 const PAIR_CODE_TTL_SEC = 900;
 const PAIR_CODE_LEN = 6;
@@ -523,6 +541,48 @@ router.get('/bot/approved', async (req, res, next) => {
       orderBy: { createdAt: 'desc' },
     });
     res.json(approved);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Archivo de evidencia para el proceso del bot (cabecera x-bot-token).
+ * Telegram no puede enviar JWT en URLs públicas; el bot descarga aquí y reenvía el buffer.
+ */
+router.get('/bot/evidence/:id/file', async (req, res, next) => {
+  try {
+    assertBotToken(req);
+    const evidence = await prisma.evidence.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!evidence) throw createError('Evidence not found', 404);
+
+    const s3 = parseS3Uri(evidence.filepath);
+    if (s3) {
+      if (!isS3Configured()) throw createError('Storage not configured', 500);
+      const signed = await getSignedDownloadUrl(s3.key, 3600, s3.bucket);
+      return res.redirect(302, signed);
+    }
+
+    const abs = localDiskAbsoluteForBot(evidence.filepath);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+      throw createError('File not found', 404);
+    }
+
+    const ext = path.extname(path.basename(evidence.filepath)).toLowerCase();
+    const mimeFromExt: Record<string, string> = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+    };
+    const ct = evidence.mimetype || mimeFromExt[ext] || 'application/octet-stream';
+    res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.sendFile(path.resolve(abs));
   } catch (err) {
     next(err);
   }

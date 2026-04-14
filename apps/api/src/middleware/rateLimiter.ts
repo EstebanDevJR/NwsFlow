@@ -121,7 +121,8 @@ export const compositeRateLimiter = (req: Request, res: Response, next: NextFunc
   const isStrict =
     (p.includes('/api/users') && req.method !== 'GET') ||
     (p.includes('/api/payments') && req.method !== 'GET') ||
-    p.includes('/api/auth/change-password');
+    p.includes('/api/auth/change-password') ||
+    (p.includes('/api/admin') && req.method !== 'GET');
   if (isStrict) {
     return strictMutationLimiter(req, res, next);
   }

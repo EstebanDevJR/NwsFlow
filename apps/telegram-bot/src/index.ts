@@ -1,4 +1,4 @@
-import { Context, Telegraf, Markup } from 'telegraf';
+import { Context, Telegraf, Input, Markup } from 'telegraf';
 import { config, paymentMethodLabel } from '@paymentflow/shared';
 import Redis from 'ioredis';
 
@@ -72,6 +72,16 @@ async function apiRequest<T>(endpoint: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Descarga binario con token del bot (Telegram no puede usar URLs firmadas sin fallos de HMAC). */
+async function fetchEvidenceFileBuffer(evidenceId: string): Promise<Buffer | null> {
+  if (!botToken) return null;
+  const res = await fetch(`${apiUrl}/telegram/bot/evidence/${encodeURIComponent(evidenceId)}/file`, {
+    headers: { 'x-bot-token': botToken },
+  });
+  if (!res.ok) return null;
+  return Buffer.from(await res.arrayBuffer());
+}
+
 type ResolveResult =
   | { status: 'linked'; name: string }
   | { status: 'needs_pairing'; canPair: boolean; message?: string }
@@ -117,7 +127,7 @@ function textHelpLinked(): string {
     `<code>/ejecutar</code> — Mismo listado que «Ejecutar pago».\n` +
     `<code>/cancelar</code> / <code>/reiniciar</code> — Mismo que «Reiniciar menú».\n` +
     `<code>/ayuda</code> — Esto.\n\n` +
-    `💡 <i>Imágenes adjuntas:</i> hace falta <code>API_PUBLIC_URL</code> con <b>HTTPS</b> público. Si no cargan, abre la solicitud en la web.`
+    `💡 <i>Evidencias:</i> se envían desde el servidor con tu token de bot. Si falla, abre la solicitud en la web.`
   );
 }
 
@@ -364,31 +374,33 @@ async function sendPaymentDetail(ctx: Context, id: string) {
   await ctx.reply(head, { parse_mode: 'HTML' });
 
   for (const ev of d.evidences) {
-    if (!ev.url) {
+    const cap = `${escapeHtml(ev.filename)} · ${escapeHtml(ev.mimetype)}`;
+    const buf = await fetchEvidenceFileBuffer(ev.id);
+    if (!buf || buf.length === 0) {
+      const linkHint = ev.url
+        ? `\n<a href="${escapeHtml(ev.url)}">Enlace alternativo</a>`
+        : '';
       await ctx.reply(
-        `📎 <b>${escapeHtml(ev.filename)}</b> (${escapeHtml(ev.mimetype)})\n<i>No se pudo generar enlace. Ábrela en la web.</i>`,
+        `📎 <b>${escapeHtml(ev.filename)}</b>\n<i>No se pudo descargar el archivo desde la API.${linkHint}</i>`,
         { parse_mode: 'HTML' }
       );
       continue;
     }
-    const cap = `${escapeHtml(ev.filename)} · ${escapeHtml(ev.mimetype)}`;
     if (ev.mimetype.startsWith('image/')) {
       try {
-        await ctx.replyWithPhoto(ev.url, { caption: cap, parse_mode: 'HTML' });
+        await ctx.replyWithPhoto(Input.fromBuffer(buf, ev.filename), { caption: cap, parse_mode: 'HTML' });
       } catch {
         await ctx.reply(
-          `📎 <b>${escapeHtml(ev.filename)}</b> (imagen)\n` +
-            `<a href="${escapeHtml(ev.url)}">Abrir enlace</a>\n\n` +
-            `<i>Si no se ve la foto, Telegram no pudo descargar la URL (suele requerir HTTPS público).</i>`,
+          `📎 <b>${escapeHtml(ev.filename)}</b> (imagen)\n<i>Telegram rechazó el archivo. Prueba desde la web.</i>`,
           { parse_mode: 'HTML' }
         );
       }
     } else {
       try {
-        await ctx.replyWithDocument(ev.url, { caption: cap, parse_mode: 'HTML' });
+        await ctx.replyWithDocument(Input.fromBuffer(buf, ev.filename), { caption: cap, parse_mode: 'HTML' });
       } catch {
         await ctx.reply(
-          `📎 <b>${escapeHtml(ev.filename)}</b>\n<a href="${escapeHtml(ev.url)}">Descargar</a>`,
+          `📎 <b>${escapeHtml(ev.filename)}</b>\n<i>No se pudo enviar como documento. Abre la solicitud en la web.</i>`,
           { parse_mode: 'HTML' }
         );
       }

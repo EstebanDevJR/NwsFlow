@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore, User } from '@/store/useAuthStore';
 import {
+  AlertTriangle,
   Bell,
   CheckCircle,
   Camera,
@@ -12,6 +13,7 @@ import {
   MessageCircle,
   Send,
   Shield,
+  Trash2,
   User as UserIcon,
   Users,
   XCircle,
@@ -51,6 +53,11 @@ export function Settings() {
   >([]);
   const [holdersLoading, setHoldersLoading] = useState(false);
   const [holderToggleId, setHolderToggleId] = useState<string | null>(null);
+
+  const [purgeAck, setPurgeAck] = useState(false);
+  const [purgePhrase, setPurgePhrase] = useState('');
+  const [purgeLoading, setPurgeLoading] = useState(false);
+  const [purgeMsg, setPurgeMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const refreshMe = async () => {
     const u = await api.get<User>('/auth/me');
@@ -606,6 +613,99 @@ export function Settings() {
             </Button>
           </CardContent>
         </Card>
+
+        {user.role === 'HOLDER' && (
+          <Card className="gsap-card border-destructive/30 bg-destructive/[0.06] dark:bg-destructive/10">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-destructive" />
+                <CardTitle className="text-destructive">Zona de pruebas</CardTitle>
+              </div>
+              <CardDescription>
+                Elimina <strong>todas</strong> las solicitudes de pago (pendientes, aprobadas, rechazadas y pagadas),
+                adjuntos en servidor, y notificaciones de tipo pago. No borra usuarios ni reuniones.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div
+                className="flex gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100"
+                role="note"
+              >
+                <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <span>
+                  Doble verificación: marca la casilla, escribe la frase exacta y confirma en el cuadro del navegador.
+                </span>
+              </div>
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={purgeAck}
+                  onChange={(e) => setPurgeAck(e.target.checked)}
+                  className="mt-1 rounded border-input"
+                />
+                <span>
+                  Entiendo que esta acción es <strong>irreversible</strong> y borrará todo el historial de solicitudes
+                  visible en Aprobaciones, Pagos pendientes e Historial/Pagos ejecutados.
+                </span>
+              </label>
+              <div className="grid gap-2">
+                <Label htmlFor="purge-phrase">Escribe exactamente (mayúsculas y sin comillas):</Label>
+                <code className="text-xs bg-muted px-2 py-1 rounded block w-fit">BORRAR TODAS LAS SOLICITUDES</code>
+                <Input
+                  id="purge-phrase"
+                  value={purgePhrase}
+                  onChange={(e) => setPurgePhrase(e.target.value)}
+                  className="bg-background/50 font-mono text-sm"
+                  placeholder="BORRAR TODAS LAS SOLICITUDES"
+                  autoComplete="off"
+                />
+              </div>
+              {purgeMsg && (
+                <p className={`text-sm ${purgeMsg.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>
+                  {purgeMsg.text}
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={purgeLoading || !purgeAck || purgePhrase.trim() !== 'BORRAR TODAS LAS SOLICITUDES'}
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      'Última confirmación: se eliminarán TODAS las solicitudes de pago y sus archivos. ¿Continuar?'
+                    )
+                  ) {
+                    return;
+                  }
+                  setPurgeLoading(true);
+                  setPurgeMsg(null);
+                  try {
+                    const r = await api.post<{
+                      ok: boolean;
+                      deletedPaymentRequests: number;
+                      evidencesRemoved: number;
+                    }>('/admin/purge-payment-requests', {
+                      confirmPhrase: purgePhrase.trim(),
+                    });
+                    setPurgeMsg({
+                      ok: true,
+                      text: `Listo: ${r.deletedPaymentRequests} solicitudes eliminadas (${r.evidencesRemoved} adjuntos procesados).`,
+                    });
+                    setPurgePhrase('');
+                    setPurgeAck(false);
+                  } catch (err: unknown) {
+                    const msg = err instanceof Error ? err.message : 'Error al eliminar';
+                    setPurgeMsg({ ok: false, text: msg });
+                  } finally {
+                    setPurgeLoading(false);
+                  }
+                }}
+              >
+                {purgeLoading ? 'Eliminando…' : 'Eliminar todas las solicitudes de prueba'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
