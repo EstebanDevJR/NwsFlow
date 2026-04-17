@@ -744,46 +744,155 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
       take: 2000,
     });
 
-    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
+    const doc = new PDFDocument({
+      size: 'A4',
+      layout: 'landscape',
+      margin: 44,
+      bufferPages: true,
+    });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="nwspayflow-ingresos.pdf"');
     doc.pipe(res);
 
-    doc.fontSize(16).font('Helvetica-Bold').text('NWSPayFlow - Reporte de ingresos');
-    doc.moveDown(0.5);
-    doc.fontSize(9).font('Helvetica').fillColor('#666').text(`Generado: ${new Date().toLocaleString('es-CO')}`);
-    doc.fillColor('#000');
-    doc.moveDown(1);
-
     const totalQuantity = incomes.reduce((s, x) => s + Number(x.digitalService), 0);
     const totalReceived = incomes.reduce((s, x) => s + Number(x.receivedAmount), 0);
-    doc.fontSize(10).text(`Registros: ${incomes.length}`);
-    doc.text(`Cantidad servicio digital: ${totalQuantity.toLocaleString('es-CO')}`);
-    doc.text(`Total recibido: ${formatCurrencyAmount(totalReceived, 'COP')}`);
-    doc.moveDown(1);
 
-    for (const r of incomes) {
-      doc
-        .font('Helvetica-Bold')
-        .fontSize(10)
-        .text(`${r.date.toLocaleDateString('es-CO')} - ${r.digitalService}`);
-      doc
-        .font('Helvetica')
-        .fontSize(9)
-        .text(
-          `Cliente: ${r.customerType} | Metodo: ${r.paymentMethod}${r.paymentMethod === 'OTRO' && r.paymentMethodOther ? ` (${r.paymentMethodOther})` : ''}`
-        );
-      doc
-        .font('Helvetica')
-        .fontSize(9)
-        .text(`Cantidad servicio: ${Number(r.digitalService).toLocaleString('es-CO')} | Recibido: ${formatCurrencyAmount(Number(r.receivedAmount), 'COP')}`);
-      if (r.note) {
-        doc.font('Helvetica').fontSize(9).text(`Nota: ${pdfEscape(r.note, 150)}`);
+    const brand = '#0f766e';
+    const brandLight = '#ecfdf5';
+    const textMuted = '#64748b';
+    const W = doc.page.width;
+    const M = 44;
+    const tableW = W - 2 * M;
+    let rowY = 0;
+
+    const drawHeader = () => {
+      doc.save();
+      doc.rect(0, 0, W, 88).fill(brand);
+      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(20).text('NWSPayFlow', M, 22, { width: tableW });
+      doc.font('Helvetica').fontSize(12).fillColor('#ccfbf1');
+      doc.text('Informe de ingresos', M, 46);
+      doc.fontSize(9).fillColor('#99f6e4').text('Documento interno · Confidencial', M, 64);
+      doc.restore();
+      rowY = 104;
+    };
+
+    drawHeader();
+
+    doc.fillColor(textMuted).font('Helvetica').fontSize(9);
+    const period =
+      startDate || endDate
+        ? `Período: ${startDate || '…'} — ${endDate || '…'}`
+        : 'Sin filtro de fechas (todos los registros según otros criterios)';
+    doc.text(period, M, rowY, { width: tableW });
+    rowY += 22;
+    doc.text(`Generación: ${new Date().toLocaleString('es-CO')} · Registros: ${incomes.length}`, M, rowY);
+    rowY += 24;
+
+    doc.save();
+    doc.rect(M, rowY, tableW, 36).fill('#f0fdfa');
+    doc.strokeColor(brand).lineWidth(1).rect(M, rowY, tableW, 36).stroke();
+    doc.fillColor(brand).font('Helvetica-Bold').fontSize(10);
+    doc.text(`Servicios digitales: ${totalQuantity.toLocaleString('es-CO')}`, M + 12, rowY + 12);
+    doc.text(`Total recibido: ${formatCurrencyAmount(totalReceived, 'COP')}`, M + 260, rowY + 12);
+    doc.restore();
+    rowY += 50;
+
+    const col = [
+      { w: 72, h: 'Fecha' },
+      { w: 88, h: 'Cliente' },
+      { w: 108, h: 'Método pago' },
+      { w: 112, h: 'Servicio digital' },
+      { w: 88, h: 'Cantidad' },
+      { w: 96, h: 'Recibido' },
+      { w: 100, h: 'Registrado por' },
+    ];
+
+    const headerH = 22;
+    const rowH = 20;
+    const bottomLimit = doc.page.height - 52;
+
+    const drawTableHeader = (y: number) => {
+      doc.save();
+      doc.rect(M, y, tableW, headerH).fill(brandLight);
+      doc.strokeColor('#99f6e4').lineWidth(0.5).rect(M, y, tableW, headerH).stroke();
+      let x = M + 6;
+      doc.fillColor(brand).font('Helvetica-Bold').fontSize(8);
+      for (const c of col) {
+        doc.text(c.h, x, y + 6, { width: c.w - 8 });
+        x += c.w;
       }
-      doc.font('Helvetica').fontSize(8).fillColor('#666').text(`Registrado por: ${r.createdBy.name}`);
-      doc.fillColor('#000');
-      doc.moveDown(0.8);
-      if (doc.y > doc.page.height - 80) doc.addPage();
+      doc.restore();
+      return y + headerH;
+    };
+
+    const ensureSpace = (need: number) => {
+      if (rowY + need > bottomLimit) {
+        doc.addPage();
+        rowY = M;
+        rowY = drawTableHeader(rowY);
+      }
+    };
+
+    rowY = drawTableHeader(rowY);
+    doc.font('Helvetica').fontSize(8).fillColor('#0f172a');
+
+    let idx = 0;
+    for (const r of incomes) {
+      ensureSpace(rowH + 4);
+      const bg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+      doc.save();
+      doc.rect(M, rowY, tableW, rowH).fill(bg);
+      doc.restore();
+
+      let x = M + 6;
+      const method = r.paymentMethod === 'OTRO' && r.paymentMethodOther
+        ? `OTRO (${pdfEscape(r.paymentMethodOther, 18)})`
+        : r.paymentMethod;
+      const cells = [
+        r.date.toLocaleDateString('es-CO'),
+        r.customerType,
+        pdfEscape(method, 24),
+        pdfEscape(r.digitalService, 26),
+        Number(r.digitalService).toLocaleString('es-CO'),
+        formatCurrencyAmount(Number(r.receivedAmount), 'COP'),
+        pdfEscape(r.createdBy.name, 24),
+      ];
+
+      for (let i = 0; i < col.length; i++) {
+        doc.fillColor('#0f172a').text(cells[i], x, rowY + 5, { width: col[i].w - 8, lineBreak: false });
+        x += col[i].w;
+      }
+      doc.strokeColor('#e2e8f0').lineWidth(0.3).moveTo(M, rowY + rowH).lineTo(M + tableW, rowY + rowH).stroke();
+      rowY += rowH;
+      idx++;
+    }
+
+    if (incomes.some((r) => r.note?.trim())) {
+      ensureSpace(22);
+      rowY += 10;
+      doc.fillColor(textMuted).font('Helvetica-Bold').fontSize(9).text('Notas (resumen):', M, rowY);
+      rowY += 14;
+      doc.fillColor('#0f172a').font('Helvetica').fontSize(8);
+
+      for (const r of incomes) {
+        if (!r.note?.trim()) continue;
+        ensureSpace(14);
+        const noteLine = `${r.date.toLocaleDateString('es-CO')} · ${r.customerType}: ${pdfEscape(r.note, 140)}`;
+        doc.text(noteLine, M, rowY, { width: tableW });
+        rowY += 12;
+      }
+    }
+
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc.fontSize(8).fillColor(textMuted).font('Helvetica');
+      doc.text(
+        `NWSPayFlow · ${new Date().toLocaleDateString('es-CO')} · Página ${i - range.start + 1} de ${range.count}`,
+        M,
+        doc.page.height - 28,
+        { align: 'center', width: tableW }
+      );
     }
 
     doc.end();
