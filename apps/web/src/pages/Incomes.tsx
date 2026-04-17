@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
 import { useCreateIncome, useIncomes, useIncomeSummary, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
 import { formatCurrencyAmount } from '@paymentflow/shared';
 import { Loader2 } from 'lucide-react';
@@ -83,7 +84,7 @@ export function Incomes() {
       <div>
         <h2 className="text-2xl font-semibold">Ingresos</h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Registro y reportes de servicios digitales por fecha, tipo de cliente y método de pago.
+          Registro y reportes de ingresos por fecha, tipo de cliente, método de pago y cantidad de servicio digital prestado.
         </p>
       </div>
 
@@ -92,33 +93,79 @@ export function Incomes() {
           <CardTitle className="text-base">Registrar ingreso</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            <Select value={customerType} onValueChange={(v) => setCustomerType(v as IncomeCustomerType)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="CLIENTE">Cliente</SelectItem>
-                <SelectItem value="DESTACADO">Destacado</SelectItem>
-                <SelectItem value="RICACHON">Ricachon</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as IncomePaymentMethod)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="NEQUI">Nequi</SelectItem>
-                <SelectItem value="DAVIPLATA">Daviplata</SelectItem>
-                <SelectItem value="BANCOLOMBIA">Bancolombia</SelectItem>
-                <SelectItem value="PAYPAL">Paypal</SelectItem>
-                <SelectItem value="OTRO">Otro</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input placeholder="Servicio digital prestado" value={digitalService} onChange={(e) => setDigitalService(e.target.value)} />
-            <Input type="number" min="0" step="0.01" placeholder="Total vendido" value={soldAmount} onChange={(e) => setSoldAmount(e.target.value)} />
-            <Input type="number" min="0" step="0.01" placeholder="Total recibido" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} />
-            {paymentMethod === 'OTRO' && (
-              <Input placeholder="Especifica método de pago" value={paymentMethodOther} onChange={(e) => setPaymentMethodOther(e.target.value)} />
-            )}
-            <Input placeholder="Nota (opcional)" value={note} onChange={(e) => setNote(e.target.value)} />
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              Completa el registro del ingreso. Si eliges <strong>Otros</strong> en método de pago, debes especificar cuál.
+            </p>
+
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <Label>Fecha</Label>
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tipo de cliente</Label>
+                <Select value={customerType} onValueChange={(v) => setCustomerType(v as IncomeCustomerType)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CLIENTE">Cliente</SelectItem>
+                    <SelectItem value="DESTACADO">Destacado</SelectItem>
+                    <SelectItem value="RICACHON">Ricachon</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Método de pago</Label>
+                <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v as IncomePaymentMethod)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NEQUI">Nequi</SelectItem>
+                    <SelectItem value="DAVIPLATA">Daviplata</SelectItem>
+                    <SelectItem value="BANCOLOMBIA">Bancolombia</SelectItem>
+                    <SelectItem value="PAYPAL">Paypal</SelectItem>
+                    <SelectItem value="OTRO">Otros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Cant. servicio digital prestado</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Ej. 1000"
+                  value={digitalService}
+                  onChange={(e) => setDigitalService(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label>Total vendido</Label>
+                <Input type="number" min="0" step="0.01" placeholder="0.00" value={soldAmount} onChange={(e) => setSoldAmount(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Total recibido</Label>
+                <Input type="number" min="0" step="0.01" placeholder="0.00" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} />
+              </div>
+              {paymentMethod === 'OTRO' && (
+                <div className="space-y-1.5">
+                  <Label>Especifica cuál método</Label>
+                  <Input placeholder="Ej. Binance, efectivo, etc." value={paymentMethodOther} onChange={(e) => setPaymentMethodOther(e.target.value)} />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Nota (opcional)</Label>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Agrega contexto del ingreso, detalle del acuerdo, observaciones, etc."
+                className="flex min-h-[110px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-y"
+              />
+            </div>
           </div>
           <Button onClick={submit} disabled={createIncome.isPending}>
             {createIncome.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -178,7 +225,7 @@ export function Incomes() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Servicios digitales prestados</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Cantidad de servicio digital prestado</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm">
           {(summaryRes?.byDigitalService ?? []).slice(0, 12).map((x) => (
             <div key={x.label} className="flex items-center justify-between border-b border-border/40 pb-2">
@@ -201,7 +248,7 @@ export function Incomes() {
                   <TableHead>Fecha</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Método</TableHead>
-                  <TableHead>Servicio digital</TableHead>
+                  <TableHead>Cant. servicio digital</TableHead>
                   <TableHead className="text-right">Vendido</TableHead>
                   <TableHead className="text-right">Recibido</TableHead>
                 </TableRow>

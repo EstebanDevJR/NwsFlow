@@ -12,7 +12,10 @@ const createIncomeSchema = z
     customerType: z.enum(['CLIENTE', 'DESTACADO', 'RICACHON']),
     paymentMethod: z.enum(['NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'PAYPAL', 'OTRO']),
     paymentMethodOther: z.string().trim().max(120).optional(),
-    digitalService: z.string().trim().min(2).max(200),
+    digitalService: z
+      .string()
+      .trim()
+      .regex(/^\d+(\.\d+)?$/, 'La cantidad de servicio digital debe ser numérica'),
     soldAmount: z.coerce.number().positive(),
     receivedAmount: z.coerce.number().nonnegative(),
     note: z.string().trim().max(4000).optional(),

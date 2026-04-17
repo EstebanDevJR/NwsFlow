@@ -218,8 +218,8 @@ export function Reports() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Reportes</h2>
           <p className="text-muted-foreground mt-1 max-w-xl">
-            NWSPayFlow — consulta agregada y descarga informes en Excel o PDF con formato formal. Elige si trabajas con{' '}
-            <strong>todas las solicitudes</strong> o solo con <strong>pagos ya ejecutados</strong>.
+            NWSPayFlow — consulta agregada y descarga informes en Excel o PDF. Puedes trabajar con{' '}
+            <strong>solicitudes</strong>, <strong>pagos ejecutados</strong> o <strong>ingresos</strong>.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -285,24 +285,28 @@ export function Reports() {
               <label className="text-xs font-medium text-muted-foreground">Hasta</label>
               <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="bg-background/70" />
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Categoría (exacta)</label>
-              <Input
-                placeholder="Ej. Servicios"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="bg-background/70"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Buscar texto</label>
-              <Input
-                placeholder="Concepto, descripción o categoría…"
-                value={qInput}
-                onChange={(e) => setQInput(e.target.value)}
-                className="bg-background/70"
-              />
-            </div>
+            {mode !== 'ingresos' && (
+              <>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Categoría (exacta)</label>
+                  <Input
+                    placeholder="Ej. Servicios"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="bg-background/70"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Buscar texto</label>
+                  <Input
+                    placeholder="Concepto, descripción o categoría…"
+                    value={qInput}
+                    onChange={(e) => setQInput(e.target.value)}
+                    className="bg-background/70"
+                  />
+                </div>
+              </>
+            )}
           </div>
           {mode === 'solicitudes' && (
             <div className="max-w-xs space-y-1.5">
@@ -350,9 +354,9 @@ export function Reports() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Servicio digital</label>
+                <label className="text-xs font-medium text-muted-foreground">Cant. servicio digital</label>
                 <Input
-                  placeholder="Ej. Diseno de avatar"
+                  placeholder="Ej. 1000"
                   value={incomeDigitalService}
                   onChange={(e) => setIncomeDigitalService(e.target.value)}
                   className="bg-background/70"
@@ -409,12 +413,14 @@ export function Reports() {
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-[110px]">{mode === 'ingresos' ? 'Fecha' : 'Fecha sol.'}</TableHead>
                   {mode === 'pagos' && <TableHead className="w-[110px]">Fecha pago</TableHead>}
-                  <TableHead>Concepto</TableHead>
-                  <TableHead className="w-[120px] hidden md:table-cell">Categoría</TableHead>
-                  <TableHead className="w-[72px] hidden sm:table-cell">Moneda</TableHead>
-                  <TableHead className="text-right w-[120px]">Monto</TableHead>
-                  <TableHead className="w-[110px]">Estado</TableHead>
-                  <TableHead className="min-w-[140px] hidden lg:table-cell">Solicitante</TableHead>
+                  <TableHead>{mode === 'ingresos' ? 'Cant. servicio digital' : 'Concepto'}</TableHead>
+                  <TableHead className="w-[120px] hidden md:table-cell">
+                    {mode === 'ingresos' ? 'Tipo cliente' : 'Categoría'}
+                  </TableHead>
+                  <TableHead className="w-[72px] hidden sm:table-cell">{mode === 'ingresos' ? 'Método' : 'Moneda'}</TableHead>
+                  <TableHead className="text-right w-[120px]">{mode === 'ingresos' ? 'Vendido' : 'Monto'}</TableHead>
+                  <TableHead className="w-[110px]">{mode === 'ingresos' ? 'Recibido' : 'Estado'}</TableHead>
+                  <TableHead className="min-w-[140px] hidden lg:table-cell">{mode === 'ingresos' ? 'Registrado por' : 'Solicitante'}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -438,7 +444,7 @@ export function Reports() {
                             {r.description}
                           </p>
                         ) : null}
-                        {(r as any).paymentMethod ? (
+                        {(r as any).paymentMethod && mode !== 'ingresos' ? (
                           <p
                             className="text-xs text-muted-foreground line-clamp-1 mt-0.5"
                             title={`${(r as any).paymentMethod}${(r as any).paymentMethodDetail ? ` — ${(r as any).paymentMethodDetail}` : ''}`}
@@ -450,13 +456,32 @@ export function Reports() {
                       </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">{(r as any).category || (r as any).customerType || '—'}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{(r as any).currency ?? 'COP'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
+                      {mode === 'ingresos'
+                        ? (() => {
+                            const method = (r as any).paymentMethod as string | undefined;
+                            const other = (r as any).paymentMethodOther as string | undefined;
+                            if (!method) return '—';
+                            if (method === 'OTRO' && other?.trim()) return `OTRO (${other.trim()})`;
+                            return method;
+                          })()
+                        : (r as any).currency ?? 'COP'}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
                       {formatCurrencyAmount(Number((r as any).amount ?? (r as any).soldAmount ?? 0), ((r as any).currency ?? 'COP') as CurrencyCode)}
                     </TableCell>
                     <TableCell>
                       {mode === 'ingresos' ? (
-                        <Badge variant="secondary">{(r as any).paymentMethod}</Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="secondary">
+                            {formatCurrencyAmount(Number((r as any).receivedAmount ?? 0), 'COP')}
+                          </Badge>
+                          {(r as any).paymentMethod === 'OTRO' && (r as any).paymentMethodOther ? (
+                            <span className="text-[10px] text-muted-foreground">
+                              OTRO: {(r as any).paymentMethodOther}
+                            </span>
+                          ) : null}
+                        </div>
                       ) : (
                         <Badge variant={statusBadgeVariant((r as any).status)}>{statusLabel((r as any).status)}</Badge>
                       )}
@@ -515,7 +540,7 @@ export function Reports() {
           <CardContent className="pt-6">
             <div className="text-2xl font-bold tabular-nums">{loading ? '—' : reportTotal}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              {mode === 'pagos' ? 'Pagos en el resultado' : 'Solicitudes (filtradas)'}
+              {mode === 'pagos' ? 'Pagos en el resultado' : mode === 'ingresos' ? 'Ingresos en el resultado' : 'Solicitudes (filtradas)'}
             </p>
           </CardContent>
         </Card>
@@ -534,7 +559,9 @@ export function Reports() {
                 ))
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Monto total por moneda</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {mode === 'ingresos' ? 'Total vendido (COP)' : 'Monto total por moneda'}
+            </p>
           </CardContent>
         </Card>
         <Card className="gsap-item liquid-glass">
@@ -542,7 +569,9 @@ export function Reports() {
             <div className="text-2xl font-bold tabular-nums text-amber-600">
               {loading ? '—' : isIncomeMode ? reportTotal : pendingCountAgg}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Pendientes (total filtrado)</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {mode === 'ingresos' ? 'Cantidad de registros' : 'Pendientes (total filtrado)'}
+            </p>
           </CardContent>
         </Card>
         <Card className="gsap-item liquid-glass">
@@ -574,7 +603,9 @@ export function Reports() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="gsap-item liquid-glass overflow-visible">
           <CardHeader>
-            <CardTitle className="text-base font-medium">Distribución por estado</CardTitle>
+            <CardTitle className="text-base font-medium">
+              {mode === 'ingresos' ? 'Distribución por tipo de cliente' : 'Distribución por estado'}
+            </CardTitle>
             <p className="text-xs text-muted-foreground font-normal">
               Totales del conjunto filtrado (no solo la página de la tabla).
             </p>
@@ -623,7 +654,7 @@ export function Reports() {
           <CardContent className="space-y-3">
             <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-2">
               <p className="text-sm font-medium">
-                {mode === 'pagos' ? 'Informe de pagos ejecutados' : 'Informe de solicitudes'}
+                {mode === 'pagos' ? 'Informe de pagos ejecutados' : mode === 'ingresos' ? 'Informe de ingresos' : 'Informe de solicitudes'}
               </p>
               <p className="text-xs text-muted-foreground">
                 Excel: columnas detalladas incl. descripción{mode === 'pagos' ? ' y fecha de pago' : ''}. PDF: diseño horizontal con
