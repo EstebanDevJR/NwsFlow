@@ -29,6 +29,7 @@ interface User {
   email: string;
   role: 'LIDER' | 'HOLDER' | 'CAJERO';
   isActive: boolean;
+  avatar?: string | null;
 }
 
 type UserListFilters = {
@@ -335,8 +336,12 @@ export function Users() {
                 <tr key={user.id} className="hover:bg-muted/30 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-sm font-medium text-white">
-                        {user.name.charAt(0)}
+                      <div className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-border/40 shrink-0 bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-sm font-medium text-white">
+                        {user.avatar ? (
+                          <img src={user.avatar} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          user.name.charAt(0)
+                        )}
                       </div>
                       <div>
                         <div className="font-medium text-foreground">{user.name}</div>

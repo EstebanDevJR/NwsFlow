@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import prisma from '@paymentflow/database';
 import { requireRole } from '../middleware/auth.js';
 import { createError } from '../middleware/errorHandler.js';
+import { resolveStoredFileUrl } from '../lib/fileUrls.js';
 import { hashPassword } from '@paymentflow/auth';
 import { randomBytes } from 'crypto';
 
@@ -116,10 +117,25 @@ router.get('/', requireRole('HOLDER'), async (req, res, next) => {
 
     const users = await prisma.user.findMany({
       where,
-      select: { id: true, email: true, name: true, role: true, isActive: true, telegramId: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        telegramId: true,
+        createdAt: true,
+        avatar: true,
+      },
       orderBy: { createdAt: 'desc' },
     });
-    res.json(users);
+    const withAvatars = await Promise.all(
+      users.map(async (u) => ({
+        ...u,
+        avatar: u.avatar ? await resolveStoredFileUrl(u.avatar, req, 2 * 60 * 60) : null,
+      }))
+    );
+    res.json(withAvatars);
   } catch (err) {
     next(err);
   }
@@ -134,10 +150,20 @@ router.get('/:id', requireRole('HOLDER', 'LIDER'), async (req, res, next) => {
 
     const user = await prisma.user.findUnique({
       where: { id },
-      select: { id: true, email: true, name: true, role: true, isActive: true, telegramId: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        telegramId: true,
+        createdAt: true,
+        avatar: true,
+      },
     });
     if (!user) throw createError('User not found', 404);
-    res.json(user);
+    const avatarUrl = user.avatar ? await resolveStoredFileUrl(user.avatar, req, 2 * 60 * 60) : null;
+    res.json({ ...user, avatar: avatarUrl });
   } catch (err) {
     next(err);
   }
