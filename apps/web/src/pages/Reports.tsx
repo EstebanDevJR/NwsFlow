@@ -418,7 +418,7 @@ export function Reports() {
                     {mode === 'ingresos' ? 'Tipo cliente' : 'Categoría'}
                   </TableHead>
                   <TableHead className="w-[72px] hidden sm:table-cell">{mode === 'ingresos' ? 'Método' : 'Moneda'}</TableHead>
-                  <TableHead className="text-right w-[120px]">{mode === 'ingresos' ? 'Vendido' : 'Monto'}</TableHead>
+                  <TableHead className="text-right w-[120px]">{mode === 'ingresos' ? 'Cantidad' : 'Monto'}</TableHead>
                   <TableHead className="w-[110px]">{mode === 'ingresos' ? 'Recibido' : 'Estado'}</TableHead>
                   <TableHead className="min-w-[140px] hidden lg:table-cell">{mode === 'ingresos' ? 'Registrado por' : 'Solicitante'}</TableHead>
                 </TableRow>
@@ -468,7 +468,9 @@ export function Reports() {
                         : (r as any).currency ?? 'COP'}
                     </TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {formatCurrencyAmount(Number((r as any).amount ?? (r as any).soldAmount ?? 0), ((r as any).currency ?? 'COP') as CurrencyCode)}
+                      {mode === 'ingresos'
+                        ? Number((r as any).digitalService ?? 0).toLocaleString('es-CO')
+                        : formatCurrencyAmount(Number((r as any).amount ?? 0), ((r as any).currency ?? 'COP') as CurrencyCode)}
                     </TableCell>
                     <TableCell>
                       {mode === 'ingresos' ? (
@@ -549,6 +551,10 @@ export function Reports() {
             <div className="space-y-0.5 text-emerald-600">
               {loading ? (
                 '—'
+              ) : isIncomeMode ? (
+                <span className="text-2xl font-bold tabular-nums">
+                  {Number((agg as any)?.quantityTotal ?? 0).toLocaleString('es-CO')}
+                </span>
               ) : Object.keys(amountByCurrency).length === 0 ? (
                 <span className="text-2xl font-bold tabular-nums">—</span>
               ) : (
@@ -560,7 +566,7 @@ export function Reports() {
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {mode === 'ingresos' ? 'Total vendido (COP)' : 'Monto total por moneda'}
+              {mode === 'ingresos' ? 'Servicios digitales prestados' : 'Monto total por moneda'}
             </p>
           </CardContent>
         </Card>
@@ -595,7 +601,7 @@ export function Reports() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">{isIncomeMode ? 'Total recibido (COP)' : 'Solo aprobadas (monto por moneda)'}</p>
+            <p className="text-xs text-muted-foreground mt-1">{isIncomeMode ? 'Total vendido' : 'Solo aprobadas (monto por moneda)'}</p>
           </CardContent>
         </Card>
       </div>

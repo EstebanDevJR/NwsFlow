@@ -557,13 +557,13 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
 
     type IncomeTimelineRow = {
       bucket: Date;
-      soldTotal: string | number;
+      quantityTotal: string | number;
       receivedTotal: string | number;
       recordsCount: number;
     };
     type IncomeGroupRow = {
       label: string;
-      soldTotal: string | number;
+      quantityTotal: string | number;
       receivedTotal: string | number;
       recordsCount: number;
     };
@@ -585,15 +585,11 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
         take: limitNum,
       }),
       prisma.incomeRecord.count({ where }),
-      prisma.incomeRecord.aggregate({
-        where,
-        _sum: { soldAmount: true, receivedAmount: true },
-        _count: { _all: true },
-      }),
+      prisma.incomeRecord.aggregate({ where, _sum: { receivedAmount: true }, _count: { _all: true } }),
       prisma.$queryRaw<IncomeTimelineRow[]>(Prisma.sql`
         SELECT
           date_trunc(${selectedPeriod}, "date") AS bucket,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -604,7 +600,7 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
       prisma.$queryRaw<IncomeGroupRow[]>(Prisma.sql`
         SELECT
           "paymentMethod"::text AS label,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -615,7 +611,7 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
       prisma.$queryRaw<IncomeGroupRow[]>(Prisma.sql`
         SELECT
           "customerType"::text AS label,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -626,7 +622,7 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
       prisma.$queryRaw<IncomeGroupRow[]>(Prisma.sql`
         SELECT
           "digitalService" AS label,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -644,31 +640,31 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
         total,
         totalPages: Math.max(1, Math.ceil(total / limitNum)),
         aggregates: {
-          soldTotal: Number(totals._sum.soldAmount ?? 0),
+          quantityTotal: timeline.reduce((acc, x) => acc + Number(x.quantityTotal ?? 0), 0),
           receivedTotal: Number(totals._sum.receivedAmount ?? 0),
           recordsCount: totals._count._all,
         },
         timeline: timeline.map((x) => ({
           bucket: x.bucket,
-          soldTotal: Number(x.soldTotal ?? 0),
+          quantityTotal: Number(x.quantityTotal ?? 0),
           receivedTotal: Number(x.receivedTotal ?? 0),
           recordsCount: x.recordsCount,
         })),
         byPaymentMethod: byPaymentMethod.map((x) => ({
           label: x.label,
-          soldTotal: Number(x.soldTotal ?? 0),
+          quantityTotal: Number(x.quantityTotal ?? 0),
           receivedTotal: Number(x.receivedTotal ?? 0),
           recordsCount: x.recordsCount,
         })),
         byCustomerType: byCustomerType.map((x) => ({
           label: x.label,
-          soldTotal: Number(x.soldTotal ?? 0),
+          quantityTotal: Number(x.quantityTotal ?? 0),
           receivedTotal: Number(x.receivedTotal ?? 0),
           recordsCount: x.recordsCount,
         })),
         byDigitalService: byDigitalService.map((x) => ({
           label: x.label,
-          soldTotal: Number(x.soldTotal ?? 0),
+          quantityTotal: Number(x.quantityTotal ?? 0),
           receivedTotal: Number(x.receivedTotal ?? 0),
           recordsCount: x.recordsCount,
         })),
@@ -703,7 +699,7 @@ router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next
       { header: 'Metodo de pago', key: 'paymentMethod', width: 18 },
       { header: 'Metodo (otro)', key: 'paymentMethodOther', width: 24 },
       { header: 'Servicio digital', key: 'digitalService', width: 28 },
-      { header: 'Vendido', key: 'soldAmount', width: 14 },
+      { header: 'Cantidad servicio', key: 'digitalService', width: 16 },
       { header: 'Recibido', key: 'receivedAmount', width: 14 },
       { header: 'Nota', key: 'note', width: 40 },
       { header: 'Registrado por', key: 'createdBy', width: 20 },
@@ -715,7 +711,6 @@ router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next
         paymentMethod: r.paymentMethod,
         paymentMethodOther: r.paymentMethodOther ?? '',
         digitalService: r.digitalService,
-        soldAmount: Number(r.soldAmount),
         receivedAmount: Number(r.receivedAmount),
         note: r.note ?? '',
         createdBy: r.createdBy.name,
@@ -760,10 +755,10 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
     doc.fillColor('#000');
     doc.moveDown(1);
 
-    const totalSold = incomes.reduce((s, x) => s + Number(x.soldAmount), 0);
+    const totalQuantity = incomes.reduce((s, x) => s + Number(x.digitalService), 0);
     const totalReceived = incomes.reduce((s, x) => s + Number(x.receivedAmount), 0);
     doc.fontSize(10).text(`Registros: ${incomes.length}`);
-    doc.text(`Total vendido: ${formatCurrencyAmount(totalSold, 'COP')}`);
+    doc.text(`Cantidad servicio digital: ${totalQuantity.toLocaleString('es-CO')}`);
     doc.text(`Total recibido: ${formatCurrencyAmount(totalReceived, 'COP')}`);
     doc.moveDown(1);
 
@@ -781,7 +776,7 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
       doc
         .font('Helvetica')
         .fontSize(9)
-        .text(`Vendido: ${formatCurrencyAmount(Number(r.soldAmount), 'COP')} | Recibido: ${formatCurrencyAmount(Number(r.receivedAmount), 'COP')}`);
+        .text(`Cantidad servicio: ${Number(r.digitalService).toLocaleString('es-CO')} | Recibido: ${formatCurrencyAmount(Number(r.receivedAmount), 'COP')}`);
       if (r.note) {
         doc.font('Helvetica').fontSize(9).text(`Nota: ${pdfEscape(r.note, 150)}`);
       }

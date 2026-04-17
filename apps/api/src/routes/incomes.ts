@@ -16,7 +16,6 @@ const createIncomeSchema = z
       .string()
       .trim()
       .regex(/^\d+(\.\d+)?$/, 'La cantidad de servicio digital debe ser numérica'),
-    soldAmount: z.coerce.number().positive(),
     receivedAmount: z.coerce.number().nonnegative(),
     note: z.string().trim().max(4000).optional(),
   })
@@ -43,14 +42,14 @@ const incomeFiltersSchema = z.object({
 
 type SummaryRow = {
   bucket: Date;
-  soldTotal: string | number;
+  quantityTotal: string | number;
   receivedTotal: string | number;
   recordsCount: number;
 };
 
 type GroupTotalRow = {
   label: string;
-  soldTotal: string | number;
+  quantityTotal: string | number;
   receivedTotal: string | number;
   recordsCount: number;
 };
@@ -94,7 +93,7 @@ router.post('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
         paymentMethod: data.paymentMethod,
         paymentMethodOther: data.paymentMethod === 'OTRO' ? data.paymentMethodOther?.trim() : null,
         digitalService: data.digitalService.trim(),
-        soldAmount: data.soldAmount,
+        soldAmount: 0,
         receivedAmount: data.receivedAmount,
         note: data.note?.trim() || null,
         createdById: req.user!.userId,
@@ -114,8 +113,16 @@ router.get('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
     const filters = incomeFiltersSchema.parse(req.query);
     const where = buildWhere(filters);
     const skip = (filters.page - 1) * filters.limit;
+    const whereSql = Prisma.sql`
+      WHERE 1=1
+      ${where['date'] ? Prisma.sql`AND "date" >= ${(where['date'] as Record<string, Date>).gte ?? new Date(0)} AND "date" <= ${(where['date'] as Record<string, Date>).lte ?? new Date('9999-12-31')}` : Prisma.empty}
+      ${where['customerType'] ? Prisma.sql`AND "customerType" = ${where['customerType'] as string}::"IncomeCustomerType"` : Prisma.empty}
+      ${where['paymentMethod'] ? Prisma.sql`AND "paymentMethod" = ${where['paymentMethod'] as string}::"IncomePaymentMethod"` : Prisma.empty}
+      ${where['digitalService'] ? Prisma.sql`AND "digitalService" = ${where['digitalService'] as string}` : Prisma.empty}
+    `;
 
-    const [rows, total, totals] = await Promise.all([
+    type QuantityTotalRow = { quantityTotal: string | number };
+    const [rows, total, totals, quantityTotals] = await Promise.all([
       prisma.incomeRecord.findMany({
         where,
         include: { createdBy: { select: { id: true, name: true, role: true } } },
@@ -124,11 +131,12 @@ router.get('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
         take: filters.limit,
       }),
       prisma.incomeRecord.count({ where }),
-      prisma.incomeRecord.aggregate({
-        where,
-        _sum: { soldAmount: true, receivedAmount: true },
-        _count: { _all: true },
-      }),
+      prisma.incomeRecord.aggregate({ where, _sum: { receivedAmount: true }, _count: { _all: true } }),
+      prisma.$queryRaw<QuantityTotalRow[]>(Prisma.sql`
+        SELECT COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal"
+        FROM "IncomeRecord"
+        ${whereSql}
+      `),
     ]);
 
     return res.json({
@@ -139,7 +147,7 @@ router.get('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
         total,
         totalPages: Math.max(1, Math.ceil(total / filters.limit)),
         aggregates: {
-          soldTotal: Number(totals._sum.soldAmount ?? 0),
+          quantityTotal: Number(quantityTotals[0]?.quantityTotal ?? 0),
           receivedTotal: Number(totals._sum.receivedAmount ?? 0),
           recordsCount: totals._count._all,
         },
@@ -164,15 +172,11 @@ router.get('/summary', requireRole('HOLDER', 'CAJERO'), async (req, res, next) =
     `;
 
     const [totals, timeline, byPaymentMethod, byService, byCustomerType] = await Promise.all([
-      prisma.incomeRecord.aggregate({
-        where,
-        _sum: { soldAmount: true, receivedAmount: true },
-        _count: { _all: true },
-      }),
+      prisma.incomeRecord.aggregate({ where, _sum: { receivedAmount: true }, _count: { _all: true } }),
       prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
         SELECT
           date_trunc(${period}, "date") AS bucket,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -183,7 +187,7 @@ router.get('/summary', requireRole('HOLDER', 'CAJERO'), async (req, res, next) =
       prisma.$queryRaw<GroupTotalRow[]>(Prisma.sql`
         SELECT
           "paymentMethod"::text AS label,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -194,7 +198,7 @@ router.get('/summary', requireRole('HOLDER', 'CAJERO'), async (req, res, next) =
       prisma.$queryRaw<GroupTotalRow[]>(Prisma.sql`
         SELECT
           "digitalService" AS label,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -205,7 +209,7 @@ router.get('/summary', requireRole('HOLDER', 'CAJERO'), async (req, res, next) =
       prisma.$queryRaw<GroupTotalRow[]>(Prisma.sql`
         SELECT
           "customerType"::text AS label,
-          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM(("digitalService")::numeric), 0) AS "quantityTotal",
           COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
           COUNT(*)::int AS "recordsCount"
         FROM "IncomeRecord"
@@ -218,31 +222,31 @@ router.get('/summary', requireRole('HOLDER', 'CAJERO'), async (req, res, next) =
     return res.json({
       period,
       totals: {
-        soldTotal: Number(totals._sum.soldAmount ?? 0),
+        quantityTotal: timeline.reduce((acc, row) => acc + asNumber(row.quantityTotal), 0),
         receivedTotal: Number(totals._sum.receivedAmount ?? 0),
         recordsCount: totals._count._all,
       },
       timeline: timeline.map((row) => ({
         bucket: row.bucket,
-        soldTotal: asNumber(row.soldTotal),
+        quantityTotal: asNumber(row.quantityTotal),
         receivedTotal: asNumber(row.receivedTotal),
         recordsCount: row.recordsCount,
       })),
       byPaymentMethod: byPaymentMethod.map((row) => ({
         label: row.label,
-        soldTotal: asNumber(row.soldTotal),
+        quantityTotal: asNumber(row.quantityTotal),
         receivedTotal: asNumber(row.receivedTotal),
         recordsCount: row.recordsCount,
       })),
       byDigitalService: byService.map((row) => ({
         label: row.label,
-        soldTotal: asNumber(row.soldTotal),
+        quantityTotal: asNumber(row.quantityTotal),
         receivedTotal: asNumber(row.receivedTotal),
         recordsCount: row.recordsCount,
       })),
       byCustomerType: byCustomerType.map((row) => ({
         label: row.label,
-        soldTotal: asNumber(row.soldTotal),
+        quantityTotal: asNumber(row.quantityTotal),
         receivedTotal: asNumber(row.receivedTotal),
         recordsCount: row.recordsCount,
       })),

@@ -238,7 +238,6 @@ export interface IncomeRecord {
   paymentMethod: IncomePaymentMethod;
   paymentMethodOther?: string | null;
   digitalService: string;
-  soldAmount: number;
   receivedAmount: number;
   note?: string | null;
   createdAt: string;
@@ -253,7 +252,7 @@ export interface IncomeListResponse {
     total: number;
     totalPages: number;
     aggregates: {
-      soldTotal: number;
+      quantityTotal: number;
       receivedTotal: number;
       recordsCount: number;
     };
@@ -263,31 +262,31 @@ export interface IncomeListResponse {
 export interface IncomeSummaryResponse {
   period: 'day' | 'week' | 'month' | 'year';
   totals: {
-    soldTotal: number;
+    quantityTotal: number;
     receivedTotal: number;
     recordsCount: number;
   };
   timeline: Array<{
     bucket: string;
-    soldTotal: number;
+    quantityTotal: number;
     receivedTotal: number;
     recordsCount: number;
   }>;
   byPaymentMethod: Array<{
     label: string;
-    soldTotal: number;
+    quantityTotal: number;
     receivedTotal: number;
     recordsCount: number;
   }>;
   byDigitalService: Array<{
     label: string;
-    soldTotal: number;
+    quantityTotal: number;
     receivedTotal: number;
     recordsCount: number;
   }>;
   byCustomerType: Array<{
     label: string;
-    soldTotal: number;
+    quantityTotal: number;
     receivedTotal: number;
     recordsCount: number;
   }>;
@@ -350,7 +349,6 @@ export function useCreateIncome() {
       paymentMethod: IncomePaymentMethod;
       paymentMethodOther?: string;
       digitalService: string;
-      soldAmount: number;
       receivedAmount: number;
       note?: string;
     }) => api.post('/incomes', payload),
@@ -391,14 +389,14 @@ export function useIncomeReports(filters?: {
           limit: number;
           totalPages: number;
           aggregates: {
-            soldTotal: number;
+            quantityTotal: number;
             receivedTotal: number;
             recordsCount: number;
           };
-          timeline: Array<{ bucket: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
-          byPaymentMethod: Array<{ label: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
-          byCustomerType: Array<{ label: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
-          byDigitalService: Array<{ label: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
+          timeline: Array<{ bucket: string; quantityTotal: number; receivedTotal: number; recordsCount: number }>;
+          byPaymentMethod: Array<{ label: string; quantityTotal: number; receivedTotal: number; recordsCount: number }>;
+          byCustomerType: Array<{ label: string; quantityTotal: number; receivedTotal: number; recordsCount: number }>;
+          byDigitalService: Array<{ label: string; quantityTotal: number; receivedTotal: number; recordsCount: number }>;
         };
       }>(`/reports/incomes?${params.toString()}`);
     },

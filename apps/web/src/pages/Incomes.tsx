@@ -29,7 +29,6 @@ export function Incomes() {
   const [paymentMethod, setPaymentMethod] = useState<IncomePaymentMethod>('NEQUI');
   const [paymentMethodOther, setPaymentMethodOther] = useState('');
   const [digitalService, setDigitalService] = useState('');
-  const [soldAmount, setSoldAmount] = useState('');
   const [receivedAmount, setReceivedAmount] = useState('');
   const [note, setNote] = useState('');
 
@@ -56,26 +55,24 @@ export function Incomes() {
   const createIncome = useCreateIncome();
 
   const submit = async () => {
-    if (!date || !digitalService.trim() || !soldAmount || !receivedAmount) return;
+    if (!date || !digitalService.trim() || !receivedAmount) return;
     await createIncome.mutateAsync({
       date: new Date(date).toISOString(),
       customerType,
       paymentMethod,
       paymentMethodOther: paymentMethod === 'OTRO' ? paymentMethodOther.trim() : undefined,
       digitalService: digitalService.trim(),
-      soldAmount: Number(soldAmount),
       receivedAmount: Number(receivedAmount),
       note: note.trim() || undefined,
     });
     setDate('');
     setDigitalService('');
-    setSoldAmount('');
     setReceivedAmount('');
     setPaymentMethodOther('');
     setNote('');
   };
 
-  const totalSold = summaryRes?.totals.soldTotal ?? 0;
+  const totalQuantity = summaryRes?.totals.quantityTotal ?? 0;
   const totalReceived = summaryRes?.totals.receivedTotal ?? 0;
   const totalRecords = summaryRes?.totals.recordsCount ?? 0;
 
@@ -142,10 +139,6 @@ export function Incomes() {
 
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1.5">
-                <Label>Total vendido</Label>
-                <Input type="number" min="0" step="0.01" placeholder="0.00" value={soldAmount} onChange={(e) => setSoldAmount(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
                 <Label>Total recibido</Label>
                 <Input type="number" min="0" step="0.01" placeholder="0.00" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} />
               </div>
@@ -194,9 +187,24 @@ export function Incomes() {
       </Card>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground">Total vendido</p><p className="text-2xl font-semibold">{formatCurrencyAmount(totalSold, 'COP')}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground">Total recibido</p><p className="text-2xl font-semibold">{formatCurrencyAmount(totalReceived, 'COP')}</p></CardContent></Card>
-        <Card><CardContent className="pt-6"><p className="text-xs text-muted-foreground">Registros</p><p className="text-2xl font-semibold">{totalRecords}</p></CardContent></Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Total vendido</p>
+            <p className="text-2xl font-semibold">{formatCurrencyAmount(totalReceived, 'COP')}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Servicios digitales prestados</p>
+            <p className="text-2xl font-semibold">{totalQuantity.toLocaleString('es-CO')}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-xs text-muted-foreground">Cantidad de registros</p>
+            <p className="text-2xl font-semibold">{totalRecords}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -206,7 +214,7 @@ export function Incomes() {
             {(summaryRes?.byPaymentMethod ?? []).map((x) => (
               <div key={x.label} className="flex items-center justify-between border-b border-border/40 pb-2">
                 <span>{paymentMethodLabel[x.label as IncomePaymentMethod] ?? x.label}</span>
-                <span>{x.recordsCount} · {formatCurrencyAmount(x.receivedTotal, 'COP')}</span>
+                <span>{formatCurrencyAmount(x.receivedTotal, 'COP')}</span>
               </div>
             ))}
           </CardContent>
@@ -217,7 +225,7 @@ export function Incomes() {
             {(summaryRes?.byCustomerType ?? []).map((x) => (
               <div key={x.label} className="flex items-center justify-between border-b border-border/40 pb-2">
                 <span>{customerTypeLabel[x.label as IncomeCustomerType] ?? x.label}</span>
-                <span>{x.recordsCount} · {formatCurrencyAmount(x.receivedTotal, 'COP')}</span>
+                <span>{x.recordsCount}</span>
               </div>
             ))}
           </CardContent>
@@ -225,12 +233,12 @@ export function Incomes() {
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Cantidad de servicio digital prestado</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Activos vendidos (servicio digital)</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm">
           {(summaryRes?.byDigitalService ?? []).slice(0, 12).map((x) => (
             <div key={x.label} className="flex items-center justify-between border-b border-border/40 pb-2">
               <span>{x.label}</span>
-              <span>{x.recordsCount} · {formatCurrencyAmount(x.receivedTotal, 'COP')}</span>
+              <span>{x.quantityTotal.toLocaleString('es-CO')}</span>
             </div>
           ))}
         </CardContent>
@@ -248,9 +256,8 @@ export function Incomes() {
                   <TableHead>Fecha</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Método</TableHead>
-                  <TableHead>Cant. servicio digital</TableHead>
-                  <TableHead className="text-right">Vendido</TableHead>
-                  <TableHead className="text-right">Recibido</TableHead>
+                  <TableHead>Activo vendido</TableHead>
+                  <TableHead className="text-right">$ Recibido</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -260,7 +267,6 @@ export function Incomes() {
                     <TableCell>{customerTypeLabel[r.customerType]}</TableCell>
                     <TableCell>{paymentMethodLabel[r.paymentMethod]}{r.paymentMethod === 'OTRO' && r.paymentMethodOther ? ` (${r.paymentMethodOther})` : ''}</TableCell>
                     <TableCell>{r.digitalService}</TableCell>
-                    <TableCell className="text-right">{formatCurrencyAmount(Number(r.soldAmount), 'COP')}</TableCell>
                     <TableCell className="text-right">{formatCurrencyAmount(Number(r.receivedAmount), 'COP')}</TableCell>
                   </TableRow>
                 ))}
