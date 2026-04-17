@@ -36,10 +36,11 @@ router.get('/local', (req, res) => {
     return res.status(403).json({ error: 'Invalid or expired link' });
   }
 
-  const abs = path.join(uploadDir, basename);
+  /** Resolver siempre en absoluto: `path.join('uploads', f)` queda relativo y rompía el prefijo vs `path.resolve('uploads')`. */
   const resolvedUpload = path.resolve(uploadDir);
+  const abs = path.resolve(resolvedUpload, basename);
   if (!abs.startsWith(resolvedUpload + path.sep) && abs !== resolvedUpload) {
-    return res.status(403).end();
+    return res.status(403).json({ error: 'Invalid or expired link' });
   }
 
   if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
