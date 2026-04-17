@@ -60,21 +60,32 @@ const cajeroUpdateSchema = z.object({
   paymentProofUrl: z.string().url(),
 });
 
+/** Roles que pueden recibir una fila de PaymentApproval para un monto dado (regla activa o valor por defecto). */
+async function getMatchingApproverRoles(amount: number): Promise<Array<'HOLDER' | 'CAJERO'>> {
+  const rules = await prisma.approvalRule.findMany({
+    where: { isActive: true, minAmount: { lte: amount } },
+    orderBy: { minAmount: 'desc' },
+  });
+  const matchingRule = rules.find((r) => !r.maxAmount || amount <= r.maxAmount.toNumber());
+  if (!matchingRule?.approverRoles?.length) {
+    return ['HOLDER', 'CAJERO'];
+  }
+  const filtered = matchingRule.approverRoles.filter(
+    (r): r is 'HOLDER' | 'CAJERO' => r === 'HOLDER' || r === 'CAJERO'
+  );
+  return filtered.length > 0 ? filtered : ['HOLDER'];
+}
+
 async function initializePaymentApprovals(paymentId: string, amount: number): Promise<void> {
   const existingCount = await prisma.paymentApproval.count({
     where: { paymentRequestId: paymentId },
   });
   if (existingCount > 0) return;
 
-  const rules = await prisma.approvalRule.findMany({
-    where: { isActive: true, minAmount: { lte: amount } },
-    orderBy: { minAmount: 'desc' },
-  });
-  const matchingRule = rules.find((r) => !r.maxAmount || amount <= r.maxAmount.toNumber());
-  const approverRoles = matchingRule?.approverRoles?.length ? matchingRule.approverRoles : ['HOLDER'];
+  const approverRoles = await getMatchingApproverRoles(amount);
 
   const approvers = await prisma.user.findMany({
-    where: { isActive: true, role: { in: approverRoles as Array<'HOLDER' | 'CAJERO'> } },
+    where: { isActive: true, role: { in: approverRoles } },
     select: { id: true },
     take: 20,
   });
@@ -89,6 +100,40 @@ async function initializePaymentApprovals(paymentId: string, amount: number): Pr
       approverId: approver.id,
       status: 'PENDING',
     })),
+  });
+}
+
+/**
+ * Si la solicitud ya tenía aprobadores creados con lógica antigua (solo holders) pero la regla actual
+ * permite al rol del usuario, crea la fila pendiente para ese usuario.
+ */
+async function ensureApproverSlotForUser(
+  paymentId: string,
+  amount: number,
+  userId: string,
+  role: string
+): Promise<void> {
+  if (role !== 'HOLDER' && role !== 'CAJERO') return;
+  const approverRoles = await getMatchingApproverRoles(amount);
+  if (!approverRoles.includes(role)) return;
+
+  const existing = await prisma.paymentApproval.findFirst({
+    where: { paymentRequestId: paymentId, approverId: userId },
+  });
+  if (existing) return;
+
+  const user = await prisma.user.findFirst({
+    where: { id: userId, isActive: true, role: role as 'HOLDER' | 'CAJERO' },
+    select: { id: true },
+  });
+  if (!user) return;
+
+  await prisma.paymentApproval.create({
+    data: {
+      paymentRequestId: paymentId,
+      approverId: userId,
+      status: 'PENDING',
+    },
   });
 }
 
@@ -443,11 +488,15 @@ router.put(
         throw createError('Only PENDING requests can be approved or rejected', 400);
       }
       await initializePaymentApprovals(id, existing.amount.toNumber());
+      await ensureApproverSlotForUser(id, existing.amount.toNumber(), req.user!.userId, role);
       const approval = await prisma.paymentApproval.findFirst({
         where: { paymentRequestId: id, approverId: req.user!.userId },
       });
       if (!approval) {
-        throw createError('You are not assigned as approver for this payment', 403);
+        throw createError(
+          'No estás habilitado como aprobador para esta solicitud (revisa las reglas de aprobación).',
+          403
+        );
       }
       if (approval.status !== 'PENDING') {
         throw createError('You already processed this approval request', 400);

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import multer from 'multer';
 import { logger } from '../lib/logger.js';
 
 export interface AppError extends Error {
@@ -20,6 +21,13 @@ export const errorHandler = (
         message: issue.message,
       })),
     });
+  }
+
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'El archivo supera el tamaño máximo permitido.' });
+    }
+    return res.status(400).json({ error: err.message || 'Error al subir el archivo' });
   }
 
   if (err.message === 'Invalid file type' || err.message.startsWith('Solo imágenes')) {

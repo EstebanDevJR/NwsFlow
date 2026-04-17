@@ -145,8 +145,11 @@ export function Settings() {
                       const updated = await api.post<User>('/upload/avatar', fd);
                       setUser(updated);
                       setSaveMsg('Foto de perfil actualizada.');
-                    } catch {
-                      setSaveMsg('No se pudo subir la imagen.');
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : '';
+                      setSaveMsg(
+                        msg ? `No se pudo subir la imagen: ${msg}` : 'No se pudo subir la imagen.'
+                      );
                     } finally {
                       setAvatarUploading(false);
                     }

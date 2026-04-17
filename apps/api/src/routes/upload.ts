@@ -8,7 +8,7 @@ import { createError } from '../middleware/errorHandler.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { addTelegramJob, addInAppNotificationJob } from '../services/queue.js';
 import { uploadFile, deleteFile, isS3Configured, parseS3Uri, getSignedDownloadUrl } from '../lib/s3.js';
-import { getPublicBaseUrl, resolveStoredFileUrl } from '../lib/fileUrls.js';
+import { resolveStoredFileUrl } from '../lib/fileUrls.js';
 
 const router = Router();
 
@@ -81,13 +81,14 @@ async function persistUploadedFile(
     return { storage: 's3', storedPath, publicUrl };
   }
 
-  const publicBase = getPublicBaseUrl(req);
   /** Ruta canónica en BD: siempre `/uploads/...` para URLs estables entre entornos (disco real en UPLOAD_DIR). */
   const storedPath = `/uploads/${file.filename}`;
+  /** No hay estático en `/uploads`; solo `/api/files/local` con URL firmada (igual que en login/me). */
+  const publicUrl = (await resolveStoredFileUrl(storedPath, req, 2 * 60 * 60)) || '';
   return {
     storage: 'local',
     storedPath,
-    publicUrl: `${publicBase}${storedPath}`,
+    publicUrl,
   };
 }
 
