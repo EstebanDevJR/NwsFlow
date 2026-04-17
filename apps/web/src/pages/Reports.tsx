@@ -144,6 +144,12 @@ export function Reports() {
       { name: 'Rechazadas', value: map['REJECTED'] ?? 0 },
     ];
   }, [isIncomeMode, incomeResponse?.meta?.byCustomerType, statusBreakdown]);
+  const incomeByPaymentMethod = incomeResponse?.meta?.byPaymentMethod ?? [];
+  const incomeByService = incomeResponse?.meta?.byDigitalService ?? [];
+  const incomeTimeline = incomeResponse?.meta?.timeline ?? [];
+
+  const incomePeriodLabel =
+    incomePeriod === 'day' ? 'Día' : incomePeriod === 'week' ? 'Semana' : incomePeriod === 'month' ? 'Mes' : 'Año';
 
   useEffect(() => {
     if (containerRef.current) {
@@ -680,6 +686,74 @@ export function Reports() {
           </CardContent>
         </Card>
       </div>
+
+      {isIncomeMode && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="gsap-item liquid-glass">
+            <CardHeader>
+              <CardTitle className="text-base font-medium">Total por método de pago</CardTitle>
+              <p className="text-xs text-muted-foreground font-normal">
+                Distribución de ingreso vendido por cada canal.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {incomeByPaymentMethod.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin datos para los filtros actuales.</p>
+              ) : (
+                incomeByPaymentMethod.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
+                    <span className="text-sm font-medium">{row.label}</span>
+                    <span className="text-sm tabular-nums">{formatCurrencyAmount(row.receivedTotal, 'COP')}</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="gsap-item liquid-glass">
+            <CardHeader>
+              <CardTitle className="text-base font-medium">Servicios digitales prestados</CardTitle>
+              <p className="text-xs text-muted-foreground font-normal">
+                Cantidad acumulada por tipo de servicio.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {incomeByService.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin datos para los filtros actuales.</p>
+              ) : (
+                incomeByService.slice(0, 8).map((row) => (
+                  <div key={row.label} className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
+                    <span className="text-sm font-medium truncate pr-2">{row.label}</span>
+                    <span className="text-sm tabular-nums">{Number(row.quantityTotal).toLocaleString('es-CO')}</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="gsap-item liquid-glass">
+            <CardHeader>
+              <CardTitle className="text-base font-medium">Evolución por {incomePeriodLabel.toLowerCase()}</CardTitle>
+              <p className="text-xs text-muted-foreground font-normal">
+                Últimos periodos según el agrupador seleccionado.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {incomeTimeline.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin datos para los filtros actuales.</p>
+              ) : (
+                incomeTimeline.slice(-8).map((row) => (
+                  <div key={row.bucket} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-md border border-border/50 px-3 py-2">
+                    <span className="text-sm text-muted-foreground">{formatShortDate(row.bucket)}</span>
+                    <span className="text-sm tabular-nums">{Number(row.quantityTotal).toLocaleString('es-CO')}</span>
+                    <span className="text-sm tabular-nums font-medium">{formatCurrencyAmount(row.receivedTotal, 'COP')}</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

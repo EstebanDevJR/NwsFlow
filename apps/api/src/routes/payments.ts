@@ -10,6 +10,7 @@ import { resolveStoredFileUrl } from '../lib/fileUrls.js';
 import { formatCurrencyAmount, type CurrencyCode } from '@paymentflow/shared';
 
 const router = Router();
+const PAYMENT_REQUEST_COOLDOWN_MS = 3 * 60 * 1000;
 
 const createPaymentSchema = z.object({
   amount: z.coerce.number().positive({ message: 'El monto debe ser un número mayor que 0' }),
@@ -141,6 +142,28 @@ async function serializePaymentForResponse(payment: any, req: any) {
 
 router.post('/', requireRole('LIDER'), async (req, res, next) => {
   try {
+    const lastRequest = await prisma.paymentRequest.findFirst({
+      where: { userId: req.user!.userId },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, createdAt: true },
+    });
+
+    if (lastRequest) {
+      const elapsed = Date.now() - lastRequest.createdAt.getTime();
+      if (elapsed < PAYMENT_REQUEST_COOLDOWN_MS) {
+        const remainingMs = PAYMENT_REQUEST_COOLDOWN_MS - elapsed;
+        const remainingTotalSec = Math.ceil(remainingMs / 1000);
+        const mins = Math.floor(remainingTotalSec / 60);
+        const secs = remainingTotalSec % 60;
+        const remainingLabel =
+          mins > 0 ? `${mins}m ${String(secs).padStart(2, '0')}s` : `${secs}s`;
+        throw createError(
+          `Debes esperar ${remainingLabel} antes de crear otra solicitud de pago.`,
+          429
+        );
+      }
+    }
+
     const data = createPaymentSchema.parse(req.body);
     const payment = await prisma.paymentRequest.create({
       data: {

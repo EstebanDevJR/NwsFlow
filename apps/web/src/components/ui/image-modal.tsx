@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import gsap from 'gsap';
 import { api } from '@/lib/api';
+import { createPortal } from 'react-dom';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -100,7 +101,7 @@ export function ImageModal({ url, evidenceId, mimeType, onClose, footerSlot }: I
     }
   };
 
-  return (
+  const modalContent = (
     <div
       ref={overlayRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4"
@@ -169,4 +170,10 @@ export function ImageModal({ url, evidenceId, mimeType, onClose, footerSlot }: I
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') {
+    return modalContent;
+  }
+
+  return createPortal(modalContent, document.body);
 }
