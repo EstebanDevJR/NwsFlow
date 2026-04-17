@@ -120,7 +120,7 @@ export function Users() {
           password: formData.password,
           role: formData.role,
         };
-        if (formData.role === 'HOLDER') {
+        if (formData.role === 'HOLDER' || formData.role === 'CAJERO') {
           payload.telegramPairingAllowed = formData.telegramPairingAllowed;
         }
         await api.post('/users', payload);
@@ -295,7 +295,7 @@ export function Users() {
                       <option value="HOLDER">Holder</option>
                       <option value="CAJERO">Cajero</option>
                     </select>
-                    {formData.role === 'HOLDER' && (
+                    {(formData.role === 'HOLDER' || formData.role === 'CAJERO') && (
                       <label className="mt-3 flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="checkbox"

@@ -168,6 +168,7 @@ export function Layout() {
           { icon: MessageCircle, label: 'Mensajes', path: '/chat' },
           { icon: Users, label: 'Usuarios', path: '/users' },
           { icon: CreditCard, label: 'Pagos Ejecutados', path: '/executed' },
+          { icon: CreditCard, label: 'Ingresos', path: '/incomes' },
           { icon: FileText, label: 'Reportes', path: '/reports' },
         ];
         break;
@@ -177,6 +178,7 @@ export function Layout() {
           { icon: CheckCircle, label: 'Aprobaciones', path: '/approvals' },
           { icon: CreditCard, label: 'Pagos Pendientes', path: '/payments' },
           { icon: CheckCircle, label: 'Historial', path: '/history' },
+          { icon: CreditCard, label: 'Ingresos', path: '/incomes' },
           { icon: MessageCircle, label: 'Mensajes', path: '/chat' },
         ];
         break;
@@ -334,6 +336,7 @@ export function Layout() {
                 approvals: 'Aprobaciones',
                 payments: 'Pagos pendientes',
                 reports: 'Reportes',
+                incomes: 'Ingresos',
                 users: 'Usuarios',
                 executed: 'Pagos ejecutados',
                 meetings: 'Reuniones',

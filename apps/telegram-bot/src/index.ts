@@ -113,7 +113,7 @@ function textPairingGuide(): string {
 /** Ayuda para usuario ya vinculado (sin duplicar lo mismo en botones vs comandos). */
 function textHelpLinked(): string {
   return (
-    `📖 <b>Ayuda del bot (Holder)</b>\n\n` +
+    `📖 <b>Ayuda del bot (Holder/Cajero)</b>\n\n` +
     `Revisa y aprueba solicitudes sin abrir el navegador.\n\n` +
     `<b>Qué hace cada botón</b>\n` +
     `• <b>Resumen general</b> — Pendientes, aprobadas, rechazadas y monto aprobado.\n` +
@@ -212,7 +212,7 @@ bot.action('help_main', async (ctx) => {
   }
   return ctx.reply(
     `<b>Bot de Holders</b>\n\n` +
-      `Este bot sirve para que los <b>holders</b> autorizados aprueben solicitudes y vean información de la plataforma.\n\n` +
+      `Este bot sirve para que usuarios <b>holder/cajero</b> autorizados aprueben solicitudes y vean información de la plataforma.\n\n` +
       `Primero debes <b>vincular</b> tu Telegram con tu cuenta web. Toca «Guía paso a paso» abajo o escribe <code>/codigo</code>.`,
     { parse_mode: 'HTML', ...keyboardUnlinked }
   );
@@ -282,7 +282,7 @@ bot.start(async (ctx) => {
       );
     }
     return ctx.reply(
-      `👋 <b>¡Hola! Soy el asistente para holders</b>\n\n` +
+      `👋 <b>¡Hola! Soy el asistente para holders y cajeros</b>\n\n` +
         `Para usar el bot primero hay que <b>emparejar</b> este Telegram con tu usuario de la plataforma (solo hace falta una vez, salvo que cambies de cuenta).\n\n` +
         `👇 Toca un botón o envía <code>/codigo</code> para recibir tu clave.`,
       { parse_mode: 'HTML', ...keyboardUnlinked }

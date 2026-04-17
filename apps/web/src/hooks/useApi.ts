@@ -227,3 +227,180 @@ export function useUploadEvidence(paymentId: string) {
     },
   });
 }
+
+export type IncomeCustomerType = 'CLIENTE' | 'DESTACADO' | 'RICACHON';
+export type IncomePaymentMethod = 'NEQUI' | 'DAVIPLATA' | 'BANCOLOMBIA' | 'PAYPAL' | 'OTRO';
+
+export interface IncomeRecord {
+  id: string;
+  date: string;
+  customerType: IncomeCustomerType;
+  paymentMethod: IncomePaymentMethod;
+  paymentMethodOther?: string | null;
+  digitalService: string;
+  soldAmount: number;
+  receivedAmount: number;
+  note?: string | null;
+  createdAt: string;
+  createdBy?: { id: string; name: string; role: string };
+}
+
+export interface IncomeListResponse {
+  data: IncomeRecord[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    aggregates: {
+      soldTotal: number;
+      receivedTotal: number;
+      recordsCount: number;
+    };
+  };
+}
+
+export interface IncomeSummaryResponse {
+  period: 'day' | 'week' | 'month' | 'year';
+  totals: {
+    soldTotal: number;
+    receivedTotal: number;
+    recordsCount: number;
+  };
+  timeline: Array<{
+    bucket: string;
+    soldTotal: number;
+    receivedTotal: number;
+    recordsCount: number;
+  }>;
+  byPaymentMethod: Array<{
+    label: string;
+    soldTotal: number;
+    receivedTotal: number;
+    recordsCount: number;
+  }>;
+  byDigitalService: Array<{
+    label: string;
+    soldTotal: number;
+    receivedTotal: number;
+    recordsCount: number;
+  }>;
+  byCustomerType: Array<{
+    label: string;
+    soldTotal: number;
+    receivedTotal: number;
+    recordsCount: number;
+  }>;
+}
+
+export function useIncomes(filters?: {
+  startDate?: string;
+  endDate?: string;
+  customerType?: IncomeCustomerType;
+  paymentMethod?: IncomePaymentMethod;
+  digitalService?: string;
+  page?: number;
+  limit?: number;
+}) {
+  return useQuery({
+    queryKey: ['incomes', filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.customerType) params.append('customerType', filters.customerType);
+      if (filters?.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+      if (filters?.digitalService) params.append('digitalService', filters.digitalService);
+      if (filters?.page) params.append('page', String(filters.page));
+      if (filters?.limit) params.append('limit', String(filters.limit));
+      return api.get<IncomeListResponse>(`/incomes?${params.toString()}`);
+    },
+  });
+}
+
+export function useIncomeSummary(filters?: {
+  startDate?: string;
+  endDate?: string;
+  customerType?: IncomeCustomerType;
+  paymentMethod?: IncomePaymentMethod;
+  digitalService?: string;
+  period?: 'day' | 'week' | 'month' | 'year';
+}) {
+  return useQuery({
+    queryKey: ['income-summary', filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.customerType) params.append('customerType', filters.customerType);
+      if (filters?.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+      if (filters?.digitalService) params.append('digitalService', filters.digitalService);
+      if (filters?.period) params.append('period', filters.period);
+      return api.get<IncomeSummaryResponse>(`/incomes/summary?${params.toString()}`);
+    },
+  });
+}
+
+export function useCreateIncome() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      date: string;
+      customerType: IncomeCustomerType;
+      paymentMethod: IncomePaymentMethod;
+      paymentMethodOther?: string;
+      digitalService: string;
+      soldAmount: number;
+      receivedAmount: number;
+      note?: string;
+    }) => api.post('/incomes', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incomes'] });
+      queryClient.invalidateQueries({ queryKey: ['income-summary'] });
+    },
+  });
+}
+
+export function useIncomeReports(filters?: {
+  startDate?: string;
+  endDate?: string;
+  customerType?: IncomeCustomerType;
+  paymentMethod?: IncomePaymentMethod;
+  digitalService?: string;
+  period?: 'day' | 'week' | 'month' | 'year';
+  page?: number;
+  limit?: number;
+}) {
+  return useQuery({
+    queryKey: ['income-reports', filters],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.customerType) params.append('customerType', filters.customerType);
+      if (filters?.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+      if (filters?.digitalService) params.append('digitalService', filters.digitalService);
+      if (filters?.period) params.append('period', filters.period);
+      if (filters?.page) params.append('page', String(filters.page));
+      if (filters?.limit) params.append('limit', String(filters.limit));
+      return api.get<{
+        data: IncomeRecord[];
+        meta: {
+          total: number;
+          page: number;
+          limit: number;
+          totalPages: number;
+          aggregates: {
+            soldTotal: number;
+            receivedTotal: number;
+            recordsCount: number;
+          };
+          timeline: Array<{ bucket: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
+          byPaymentMethod: Array<{ label: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
+          byCustomerType: Array<{ label: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
+          byDigitalService: Array<{ label: string; soldTotal: number; receivedTotal: number; recordsCount: number }>;
+        };
+      }>(`/reports/incomes?${params.toString()}`);
+    },
+  });
+}

@@ -13,16 +13,21 @@ const FORBIDDEN_JWT_VALUES = new Set([
 let _jwtSecret: string | null = null;
 let _jwtRefreshSecret: string | null = null;
 
+function readNodeEnv(name: string): string | undefined {
+  const p = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  return p?.env?.[name];
+}
+
 export function isTestEnv(): boolean {
   return (
-    process.env.NODE_ENV === 'test' ||
-    process.env.VITEST === 'true' ||
-    process.env.VITEST_WORKER_ID !== undefined
+    readNodeEnv('NODE_ENV') === 'test' ||
+    readNodeEnv('VITEST') === 'true' ||
+    readNodeEnv('VITEST_WORKER_ID') !== undefined
   );
 }
 
 function readRequiredSecret(name: 'JWT_SECRET' | 'JWT_REFRESH_SECRET'): string {
-  const v = process.env[name]?.trim();
+  const v = readNodeEnv(name)?.trim();
   if (!v || v.length < MIN_JWT_LEN) {
     throw new Error(
       `${name} must be set and at least ${MIN_JWT_LEN} characters. Generate a strong random value (e.g. openssl rand -base64 48).`

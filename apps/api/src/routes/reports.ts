@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import prisma from '@paymentflow/database';
+import { Prisma } from '@prisma/client';
 import { requireRole } from '../middleware/auth.js';
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
@@ -65,6 +66,25 @@ function buildReportWhere(query: {
     ];
   }
 
+  return where;
+}
+
+function buildIncomeWhere(query: {
+  startDate?: string;
+  endDate?: string;
+  customerType?: string;
+  paymentMethod?: string;
+  digitalService?: string;
+}) {
+  const where: Record<string, unknown> = {};
+  if (query.startDate || query.endDate) {
+    where.date = {} as Record<string, Date>;
+    if (query.startDate) (where.date as Record<string, Date>).gte = dayStart(query.startDate);
+    if (query.endDate) (where.date as Record<string, Date>).lte = dayEnd(query.endDate);
+  }
+  if (query.customerType) where.customerType = query.customerType;
+  if (query.paymentMethod) where.paymentMethod = query.paymentMethod;
+  if (query.digitalService?.trim()) where.digitalService = query.digitalService.trim();
   return where;
 }
 
@@ -515,6 +535,263 @@ router.get('/dashboard', requireRole('HOLDER'), async (_req, res, next) => {
   try {
     const dashboard = await getExecutiveDashboard();
     res.json(dashboard);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
+  try {
+    const { startDate, endDate, customerType, paymentMethod, digitalService, period, page, limit } = req.query;
+    const where = buildIncomeWhere({
+      startDate: startDate as string | undefined,
+      endDate: endDate as string | undefined,
+      customerType: customerType as string | undefined,
+      paymentMethod: paymentMethod as string | undefined,
+      digitalService: digitalService as string | undefined,
+    });
+    const selectedPeriod = (period as 'day' | 'week' | 'month' | 'year' | undefined) ?? 'day';
+    const pageNum = Math.max(1, parseInt(String(page || '1'), 10) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(String(limit || '50'), 10) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
+    type IncomeTimelineRow = {
+      bucket: Date;
+      soldTotal: string | number;
+      receivedTotal: string | number;
+      recordsCount: number;
+    };
+    type IncomeGroupRow = {
+      label: string;
+      soldTotal: string | number;
+      receivedTotal: string | number;
+      recordsCount: number;
+    };
+
+    const whereSql = Prisma.sql`
+      WHERE 1=1
+      ${where['date'] ? Prisma.sql`AND "date" >= ${(where['date'] as Record<string, Date>).gte ?? new Date(0)} AND "date" <= ${(where['date'] as Record<string, Date>).lte ?? new Date('9999-12-31')}` : Prisma.empty}
+      ${where['customerType'] ? Prisma.sql`AND "customerType" = ${where['customerType'] as string}::"IncomeCustomerType"` : Prisma.empty}
+      ${where['paymentMethod'] ? Prisma.sql`AND "paymentMethod" = ${where['paymentMethod'] as string}::"IncomePaymentMethod"` : Prisma.empty}
+      ${where['digitalService'] ? Prisma.sql`AND "digitalService" = ${where['digitalService'] as string}` : Prisma.empty}
+    `;
+
+    const [rows, total, totals, timeline, byPaymentMethod, byCustomerType, byDigitalService] = await Promise.all([
+      prisma.incomeRecord.findMany({
+        where,
+        include: { createdBy: { select: { id: true, name: true, role: true } } },
+        orderBy: { date: 'desc' },
+        skip,
+        take: limitNum,
+      }),
+      prisma.incomeRecord.count({ where }),
+      prisma.incomeRecord.aggregate({
+        where,
+        _sum: { soldAmount: true, receivedAmount: true },
+        _count: { _all: true },
+      }),
+      prisma.$queryRaw<IncomeTimelineRow[]>(Prisma.sql`
+        SELECT
+          date_trunc(${selectedPeriod}, "date") AS bucket,
+          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
+          COUNT(*)::int AS "recordsCount"
+        FROM "IncomeRecord"
+        ${whereSql}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `),
+      prisma.$queryRaw<IncomeGroupRow[]>(Prisma.sql`
+        SELECT
+          "paymentMethod"::text AS label,
+          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
+          COUNT(*)::int AS "recordsCount"
+        FROM "IncomeRecord"
+        ${whereSql}
+        GROUP BY "paymentMethod"
+        ORDER BY "receivedTotal" DESC
+      `),
+      prisma.$queryRaw<IncomeGroupRow[]>(Prisma.sql`
+        SELECT
+          "customerType"::text AS label,
+          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
+          COUNT(*)::int AS "recordsCount"
+        FROM "IncomeRecord"
+        ${whereSql}
+        GROUP BY "customerType"
+        ORDER BY "receivedTotal" DESC
+      `),
+      prisma.$queryRaw<IncomeGroupRow[]>(Prisma.sql`
+        SELECT
+          "digitalService" AS label,
+          COALESCE(SUM("soldAmount"), 0) AS "soldTotal",
+          COALESCE(SUM("receivedAmount"), 0) AS "receivedTotal",
+          COUNT(*)::int AS "recordsCount"
+        FROM "IncomeRecord"
+        ${whereSql}
+        GROUP BY "digitalService"
+        ORDER BY "receivedTotal" DESC
+      `),
+    ]);
+
+    res.json({
+      data: rows,
+      meta: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limitNum)),
+        aggregates: {
+          soldTotal: Number(totals._sum.soldAmount ?? 0),
+          receivedTotal: Number(totals._sum.receivedAmount ?? 0),
+          recordsCount: totals._count._all,
+        },
+        timeline: timeline.map((x) => ({
+          bucket: x.bucket,
+          soldTotal: Number(x.soldTotal ?? 0),
+          receivedTotal: Number(x.receivedTotal ?? 0),
+          recordsCount: x.recordsCount,
+        })),
+        byPaymentMethod: byPaymentMethod.map((x) => ({
+          label: x.label,
+          soldTotal: Number(x.soldTotal ?? 0),
+          receivedTotal: Number(x.receivedTotal ?? 0),
+          recordsCount: x.recordsCount,
+        })),
+        byCustomerType: byCustomerType.map((x) => ({
+          label: x.label,
+          soldTotal: Number(x.soldTotal ?? 0),
+          receivedTotal: Number(x.receivedTotal ?? 0),
+          recordsCount: x.recordsCount,
+        })),
+        byDigitalService: byDigitalService.map((x) => ({
+          label: x.label,
+          soldTotal: Number(x.soldTotal ?? 0),
+          receivedTotal: Number(x.receivedTotal ?? 0),
+          recordsCount: x.recordsCount,
+        })),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next) => {
+  try {
+    const { startDate, endDate, customerType, paymentMethod, digitalService } = req.query;
+    const where = buildIncomeWhere({
+      startDate: startDate as string | undefined,
+      endDate: endDate as string | undefined,
+      customerType: customerType as string | undefined,
+      paymentMethod: paymentMethod as string | undefined,
+      digitalService: digitalService as string | undefined,
+    });
+    const incomes = await prisma.incomeRecord.findMany({
+      where,
+      include: { createdBy: { select: { name: true } } },
+      orderBy: { date: 'desc' },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Ingresos');
+    sheet.columns = [
+      { header: 'Fecha', key: 'date', width: 18 },
+      { header: 'Tipo de cliente', key: 'customerType', width: 18 },
+      { header: 'Metodo de pago', key: 'paymentMethod', width: 18 },
+      { header: 'Metodo (otro)', key: 'paymentMethodOther', width: 24 },
+      { header: 'Servicio digital', key: 'digitalService', width: 28 },
+      { header: 'Vendido', key: 'soldAmount', width: 14 },
+      { header: 'Recibido', key: 'receivedAmount', width: 14 },
+      { header: 'Nota', key: 'note', width: 40 },
+      { header: 'Registrado por', key: 'createdBy', width: 20 },
+    ];
+    for (const r of incomes) {
+      sheet.addRow({
+        date: r.date.toISOString(),
+        customerType: r.customerType,
+        paymentMethod: r.paymentMethod,
+        paymentMethodOther: r.paymentMethodOther ?? '',
+        digitalService: r.digitalService,
+        soldAmount: Number(r.soldAmount),
+        receivedAmount: Number(r.receivedAmount),
+        note: r.note ?? '',
+        createdBy: r.createdBy.name,
+      });
+    }
+    sheet.getRow(1).font = { bold: true };
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="nwspayflow-ingresos.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) => {
+  try {
+    const { startDate, endDate, customerType, paymentMethod, digitalService } = req.query;
+    const where = buildIncomeWhere({
+      startDate: startDate as string | undefined,
+      endDate: endDate as string | undefined,
+      customerType: customerType as string | undefined,
+      paymentMethod: paymentMethod as string | undefined,
+      digitalService: digitalService as string | undefined,
+    });
+    const incomes = await prisma.incomeRecord.findMany({
+      where,
+      include: { createdBy: { select: { name: true } } },
+      orderBy: { date: 'desc' },
+      take: 2000,
+    });
+
+    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="nwspayflow-ingresos.pdf"');
+    doc.pipe(res);
+
+    doc.fontSize(16).font('Helvetica-Bold').text('NWSPayFlow - Reporte de ingresos');
+    doc.moveDown(0.5);
+    doc.fontSize(9).font('Helvetica').fillColor('#666').text(`Generado: ${new Date().toLocaleString('es-CO')}`);
+    doc.fillColor('#000');
+    doc.moveDown(1);
+
+    const totalSold = incomes.reduce((s, x) => s + Number(x.soldAmount), 0);
+    const totalReceived = incomes.reduce((s, x) => s + Number(x.receivedAmount), 0);
+    doc.fontSize(10).text(`Registros: ${incomes.length}`);
+    doc.text(`Total vendido: ${formatCurrencyAmount(totalSold, 'COP')}`);
+    doc.text(`Total recibido: ${formatCurrencyAmount(totalReceived, 'COP')}`);
+    doc.moveDown(1);
+
+    for (const r of incomes) {
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(10)
+        .text(`${r.date.toLocaleDateString('es-CO')} - ${r.digitalService}`);
+      doc
+        .font('Helvetica')
+        .fontSize(9)
+        .text(
+          `Cliente: ${r.customerType} | Metodo: ${r.paymentMethod}${r.paymentMethod === 'OTRO' && r.paymentMethodOther ? ` (${r.paymentMethodOther})` : ''}`
+        );
+      doc
+        .font('Helvetica')
+        .fontSize(9)
+        .text(`Vendido: ${formatCurrencyAmount(Number(r.soldAmount), 'COP')} | Recibido: ${formatCurrencyAmount(Number(r.receivedAmount), 'COP')}`);
+      if (r.note) {
+        doc.font('Helvetica').fontSize(9).text(`Nota: ${pdfEscape(r.note, 150)}`);
+      }
+      doc.font('Helvetica').fontSize(8).fillColor('#666').text(`Registrado por: ${r.createdBy.name}`);
+      doc.fillColor('#000');
+      doc.moveDown(0.8);
+      if (doc.y > doc.page.height - 80) doc.addPage();
+    }
+
+    doc.end();
   } catch (err) {
     next(err);
   }

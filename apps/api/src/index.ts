@@ -12,6 +12,7 @@ import userRoutes from './routes/users.js';
 import paymentRoutes from './routes/payments.js';
 import meetingRoutes from './routes/meetings.js';
 import reportRoutes from './routes/reports.js';
+import incomeRoutes from './routes/incomes.js';
 import uploadRoutes from './routes/upload.js';
 import notificationRoutes from './routes/notifications.js';
 import budgetRoutes from './routes/budgets.js';
@@ -148,6 +149,13 @@ app.get('/api/openapi.json', (_req, res) => {
       '/reports': {
         get: { summary: 'Reportes paginados', tags: ['Reports'] },
       },
+      '/incomes': {
+        get: { summary: 'Listar ingresos', tags: ['Incomes'] },
+        post: { summary: 'Registrar ingreso', tags: ['Incomes'] },
+      },
+      '/incomes/summary': {
+        get: { summary: 'Resumen de ingresos por periodo', tags: ['Incomes'] },
+      },
       '/notifications': {
         get: { summary: 'Listar notificaciones', tags: ['Notifications'] },
       },
@@ -203,6 +211,7 @@ app.use('/api/users', authMiddleware, userRoutes);
 app.use('/api/payments', authMiddleware, paymentRoutes);
 app.use('/api/meetings', authMiddleware, meetingRoutes);
 app.use('/api/reports', authMiddleware, reportRoutes);
+app.use('/api/incomes', authMiddleware, incomeRoutes);
 app.use('/api/upload', authMiddleware, uploadRoutes);
 app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/budgets', authMiddleware, budgetRoutes);

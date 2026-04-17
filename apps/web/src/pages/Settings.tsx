@@ -90,7 +90,7 @@ export function Settings() {
           telegramPairingAllowed: boolean;
           telegramId: string | null;
         }>
-      >('/users/holders')
+      >('/users/telegram-access')
       .then((data) => {
         if (!cancelled) setHolders(data);
       })
@@ -282,7 +282,7 @@ export function Settings() {
           </CardContent>
         </Card>
 
-        {user.role === 'HOLDER' && (
+        {(user.role === 'HOLDER' || user.role === 'CAJERO') && (
           <Card className="gsap-card liquid-glass overflow-hidden border-primary/15 bg-gradient-to-br from-primary/[0.06] via-transparent to-transparent">
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -314,7 +314,7 @@ export function Settings() {
                   <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
                   <p>
                     Tu usuario no tiene permiso para vincular Telegram. Un holder administrador debe activar
-                    &quot;Permitir vinculación&quot; en la lista de holders más abajo.
+                    &quot;Permitir vinculación&quot; en la sección de holders/cajeros.
                   </p>
                 </div>
               ) : user.telegramId ? (
@@ -453,10 +453,10 @@ export function Settings() {
             <CardHeader>
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-primary" />
-                <CardTitle>Holders y Telegram</CardTitle>
+                <CardTitle>Acceso Telegram (Holders/Cajeros)</CardTitle>
               </div>
               <CardDescription>
-                Activa el permiso de vinculación solo para los holders que deben usar el bot (por ejemplo, los de cada
+                Activa el permiso de vinculación solo para los usuarios (holder/cajero) que deben usar el bot (por ejemplo, los de cada
                 rango de aprobación).
               </CardDescription>
             </CardHeader>
@@ -501,7 +501,7 @@ export function Settings() {
                             const next = e.target.checked;
                             setHolderToggleId(h.id);
                             try {
-                              await api.patch(`/users/holders/${h.id}`, { telegramPairingAllowed: next });
+                              await api.patch(`/users/telegram-access/${h.id}`, { telegramPairingAllowed: next });
                               setHolders((prev) => prev.map((x) => (x.id === h.id ? { ...x, telegramPairingAllowed: next } : x)));
                               if (h.id === user.id) {
                                 await refreshMe();

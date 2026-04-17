@@ -9,10 +9,10 @@ import { randomBytes } from 'crypto';
 
 const router = Router();
 
-router.get('/holders', requireRole('HOLDER', 'LIDER'), async (_req, res, next) => {
+router.get('/telegram-access', requireRole('HOLDER', 'LIDER'), async (_req, res, next) => {
   try {
-    const holders = await prisma.user.findMany({
-      where: { role: 'HOLDER' },
+    const users = await prisma.user.findMany({
+      where: { role: { in: ['HOLDER', 'CAJERO'] } },
       select: {
         id: true,
         email: true,
@@ -25,7 +25,7 @@ router.get('/holders', requireRole('HOLDER', 'LIDER'), async (_req, res, next) =
       },
       orderBy: { createdAt: 'desc' },
     });
-    res.json(holders);
+    res.json(users);
   } catch (err) {
     next(err);
   }
@@ -35,13 +35,13 @@ const patchHolderTelegramSchema = z.object({
   telegramPairingAllowed: z.boolean(),
 });
 
-router.patch('/holders/:id', requireRole('HOLDER'), async (req, res, next) => {
+router.patch('/telegram-access/:id', requireRole('HOLDER'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const data = patchHolderTelegramSchema.parse(req.body);
     const target = await prisma.user.findUnique({ where: { id } });
-    if (!target || target.role !== 'HOLDER') {
-      throw createError('Holder no encontrado', 404);
+    if (!target || (target.role !== 'HOLDER' && target.role !== 'CAJERO')) {
+      throw createError('Usuario no encontrado', 404);
     }
     const updated = await prisma.user.update({
       where: { id },
@@ -84,6 +84,7 @@ const updateUserSchema = z.object({
   role: z.enum(['LIDER', 'CAJERO']).optional(),
   isActive: z.boolean().optional(),
   telegramId: z.string().optional(),
+  telegramPairingAllowed: z.boolean().optional(),
   password: z.string().min(6).optional(),
 });
 
@@ -159,7 +160,7 @@ router.post('/', requireRole('HOLDER'), async (req, res, next) => {
         ...rest,
         password: hashedPassword,
         ...(telegramId ? { telegramId } : {}),
-        ...(data.role === 'HOLDER' && typeof telegramPairingAllowed === 'boolean'
+        ...((data.role === 'HOLDER' || data.role === 'CAJERO') && typeof telegramPairingAllowed === 'boolean'
           ? { telegramPairingAllowed }
           : {}),
       },

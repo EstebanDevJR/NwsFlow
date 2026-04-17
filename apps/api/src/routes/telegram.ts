@@ -84,11 +84,11 @@ async function deleteSession(chatId: number) {
   await redis.del(key);
 }
 
-async function getHolderByTelegramId(telegramId: string) {
+async function getLinkedOperatorByTelegramId(telegramId: string) {
   return prisma.user.findFirst({
     where: {
       telegramId,
-      role: 'HOLDER',
+      role: { in: ['HOLDER', 'CAJERO'] },
       isActive: true,
       telegramPairingAllowed: true,
     },
@@ -111,7 +111,7 @@ function assertBotToken(req: any) {
 }
 
 /** El bot genera el código; el holder lo introduce en la UI y valida aquí. */
-router.post('/pairing-validate', authMiddleware, requireRole('HOLDER'), async (req, res, next) => {
+router.post('/pairing-validate', authMiddleware, requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
   try {
     const rawCode = String((req.body as { code?: string })?.code || '')
       .trim()
@@ -141,8 +141,8 @@ router.post('/pairing-validate', authMiddleware, requireRole('HOLDER'), async (r
         isActive: true,
       },
     });
-    if (!user || user.role !== 'HOLDER' || !user.isActive) {
-      throw createError('Solo holders activos pueden vincular Telegram', 403);
+    if (!user || (user.role !== 'HOLDER' && user.role !== 'CAJERO') || !user.isActive) {
+      throw createError('Solo holders o cajeros activos pueden vincular Telegram', 403);
     }
     if (!user.telegramPairingAllowed) {
       throw createError(
@@ -184,7 +184,7 @@ router.post('/bot/pending-pair-code', async (req, res, next) => {
       throw createError('telegramUserId is required', 400);
     }
 
-    const linked = await getHolderByTelegramId(telegramUserId);
+    const linked = await getLinkedOperatorByTelegramId(telegramUserId);
     if (linked) {
       throw createError(
         'Ya tienes Telegram vinculado. Para cambiar de cuenta, desvincula primero desde la plataforma web (Configuración → Telegram).',
@@ -224,14 +224,14 @@ router.post('/bot/pending-pair-code', async (req, res, next) => {
   }
 });
 
-router.delete('/pairing', authMiddleware, requireRole('HOLDER'), async (req, res, next) => {
+router.delete('/pairing', authMiddleware, requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
   try {
     const userId = req.user!.userId;
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { telegramId: true, role: true },
     });
-    if (!user || user.role !== 'HOLDER') {
+    if (!user || (user.role !== 'HOLDER' && user.role !== 'CAJERO')) {
       throw createError('No permitido', 403);
     }
     if (!user.telegramId) {
@@ -255,7 +255,7 @@ router.post('/bot/resolve', async (req, res, next) => {
       throw createError('telegramUserId is required', 400);
     }
 
-    const linked = await getHolderByTelegramId(telegramUserId);
+    const linked = await getLinkedOperatorByTelegramId(telegramUserId);
     if (linked) {
       return res.json({ status: 'linked' as const, name: linked.name });
     }
@@ -274,7 +274,7 @@ router.post('/bot/resolve', async (req, res, next) => {
 
     const canPair =
       (await prisma.user.count({
-        where: { role: 'HOLDER', isActive: true, telegramPairingAllowed: true },
+        where: { role: { in: ['HOLDER', 'CAJERO'] }, isActive: true, telegramPairingAllowed: true },
       })) > 0;
 
     return res.json({
@@ -282,7 +282,7 @@ router.post('/bot/resolve', async (req, res, next) => {
       canPair,
       message: canPair
         ? undefined
-        : 'Ningún holder está habilitado para vincular Telegram. Contacta a un administrador.',
+        : 'Ningún holder o cajero está habilitado para vincular Telegram. Contacta a un administrador.',
     });
   } catch (err) {
     next(err);
@@ -311,8 +311,8 @@ router.post('/webhook', async (req, res, next) => {
       return res.json({ ok: true });
     }
 
-    const holder = await getHolderByTelegramId(String(telegramUserId));
-    if (!holder || holder.role !== 'HOLDER' || !holder.isActive) {
+    const holder = await getLinkedOperatorByTelegramId(String(telegramUserId));
+    if (!holder || (holder.role !== 'HOLDER' && holder.role !== 'CAJERO') || !holder.isActive) {
       await sendTelegramNotification(chatId, 'No tienes acceso al bot. Contacta a un administrador.');
       return res.json({ ok: true });
     }
@@ -659,8 +659,8 @@ router.post('/bot/payments/:id/mark-paid', async (req, res, next) => {
     const telegramUserId = String((req.body as { telegramUserId?: string })?.telegramUserId || '').trim();
     if (!telegramUserId) throw createError('telegramUserId is required', 400);
 
-    const holder = await getHolderByTelegramId(telegramUserId);
-    if (!holder) throw createError('Only linked holders can mark payments as paid', 403);
+    const holder = await getLinkedOperatorByTelegramId(telegramUserId);
+    if (!holder) throw createError('Only linked holders or cashiers can mark payments as paid', 403);
 
     const id = req.params.id;
     const existing = await prisma.paymentRequest.findUnique({

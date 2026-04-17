@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import gsap from 'gsap';
 import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Filter, Loader2, RefreshCw } from 'lucide-react';
-import { useReports } from '@/hooks/useApi';
+import { useReports, useIncomeReports, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { downloadReportFile } from '@/lib/reportDownload';
 import { cn } from '@/lib/utils';
@@ -22,7 +22,7 @@ import type { RequestStatus } from '@/store/useAppStore';
 import { chartTickProps, chartTooltipShared } from '@/lib/rechartsTheme';
 import { formatCurrencyAmount, paymentMethodLabel, type CurrencyCode } from '@paymentflow/shared';
 
-type ReportMode = 'solicitudes' | 'pagos';
+type ReportMode = 'solicitudes' | 'pagos' | 'ingresos';
 
 const PREVIEW_PAGE_SIZE = 50;
 
@@ -73,6 +73,10 @@ export function Reports() {
   const [category, setCategory] = useState('');
   const [status, setStatus] = useState<string>('');
   const [qInput, setQInput] = useState('');
+  const [incomeCustomerType, setIncomeCustomerType] = useState<IncomeCustomerType | ''>('');
+  const [incomePaymentMethod, setIncomePaymentMethod] = useState<IncomePaymentMethod | ''>('');
+  const [incomeDigitalService, setIncomeDigitalService] = useState('');
+  const [incomePeriod, setIncomePeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const qDebounced = useDebouncedValue(qInput, 400);
   const [page, setPage] = useState(1);
 
@@ -96,15 +100,42 @@ export function Reports() {
     [startDate, endDate, dateField, category, mode, status, qDebounced, page]
   );
 
-  const { data: reportResponse, isLoading, isFetching, refetch, error } = useReports(reportFilters);
+  const {
+    data: reportResponse,
+    isLoading: paymentsLoading,
+    isFetching: paymentsFetching,
+    refetch: refetchPayments,
+    error: paymentsError,
+  } = useReports(reportFilters);
+  const {
+    data: incomeResponse,
+    isLoading: incomesLoading,
+    isFetching: incomesFetching,
+    refetch: refetchIncomes,
+    error: incomesError,
+  } = useIncomeReports({
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
+    customerType: incomeCustomerType || undefined,
+    paymentMethod: incomePaymentMethod || undefined,
+    digitalService: incomeDigitalService.trim() || undefined,
+    period: incomePeriod,
+    page,
+    limit: PREVIEW_PAGE_SIZE,
+  });
 
-  const reports = reportResponse?.data ?? [];
-  const reportTotal = reportResponse?.meta?.total ?? 0;
-  const totalPages = reportResponse?.meta?.totalPages ?? 1;
-  const agg = reportResponse?.meta?.aggregates;
-  const statusBreakdown = reportResponse?.meta?.statusBreakdown ?? [];
+  const isIncomeMode = mode === 'ingresos';
+  const reports = isIncomeMode ? incomeResponse?.data ?? [] : reportResponse?.data ?? [];
+  const reportTotal = isIncomeMode ? incomeResponse?.meta?.total ?? 0 : reportResponse?.meta?.total ?? 0;
+  const totalPages = isIncomeMode ? incomeResponse?.meta?.totalPages ?? 1 : reportResponse?.meta?.totalPages ?? 1;
+  const agg = isIncomeMode ? incomeResponse?.meta?.aggregates : reportResponse?.meta?.aggregates;
+  const statusBreakdown = isIncomeMode ? [] : reportResponse?.meta?.statusBreakdown ?? [];
 
   const dataByStatus = useMemo(() => {
+    if (isIncomeMode) {
+      const rows = incomeResponse?.meta?.byCustomerType ?? [];
+      return rows.map((r) => ({ name: r.label, value: r.recordsCount }));
+    }
     const map = Object.fromEntries(statusBreakdown.map((r) => [r.status, r.count]));
     return [
       { name: 'Pendientes', value: map['PENDING'] ?? 0 },
@@ -112,7 +143,7 @@ export function Reports() {
       { name: 'Pagadas', value: map['PAID'] ?? 0 },
       { name: 'Rechazadas', value: map['REJECTED'] ?? 0 },
     ];
-  }, [statusBreakdown]);
+  }, [isIncomeMode, incomeResponse?.meta?.byCustomerType, statusBreakdown]);
 
   useEffect(() => {
     if (containerRef.current) {
@@ -130,6 +161,12 @@ export function Reports() {
     if (startDate) p.append('startDate', startDate);
     if (endDate) p.append('endDate', endDate);
     if (mode === 'pagos') p.append('dateField', 'paid');
+    if (mode === 'ingresos') {
+      if (incomeCustomerType) p.append('customerType', incomeCustomerType);
+      if (incomePaymentMethod) p.append('paymentMethod', incomePaymentMethod);
+      if (incomeDigitalService.trim()) p.append('digitalService', incomeDigitalService.trim());
+      p.append('period', incomePeriod);
+    }
     if (category.trim()) p.append('category', category.trim());
     if (mode === 'solicitudes' && status) p.append('status', status);
     if (qDebounced.trim()) p.append('q', qDebounced.trim());
@@ -138,19 +175,20 @@ export function Reports() {
 
   const downloadExcel = () => {
     const q = buildExportQuery();
-    return downloadReportFile(`/reports/export/excel?${q}`);
+    return downloadReportFile(mode === 'ingresos' ? `/reports/incomes/export/excel?${q}` : `/reports/export/excel?${q}`);
   };
 
   const downloadPdf = () => {
     const q = buildExportQuery();
-    return downloadReportFile(`/reports/export/pdf?${q}`);
+    return downloadReportFile(mode === 'ingresos' ? `/reports/incomes/export/pdf?${q}` : `/reports/export/pdf?${q}`);
   };
 
-  const pendingCountAgg = agg?.pendingCount ?? 0;
-  const approvedAmountAgg = agg?.approvedAmount ?? 0;
-  const amountByCurrency = agg?.amountByCurrency ?? {};
-  const approvedAmountByCurrency = agg?.approvedAmountByCurrency ?? {};
-  const loading = isLoading || isFetching;
+  const pendingCountAgg = isIncomeMode ? 0 : (agg as any)?.pendingCount ?? 0;
+  const approvedAmountAgg = isIncomeMode ? 0 : (agg as any)?.approvedAmount ?? 0;
+  const amountByCurrency = isIncomeMode ? {} : (agg as any)?.amountByCurrency ?? {};
+  const approvedAmountByCurrency = isIncomeMode ? {} : (agg as any)?.approvedAmountByCurrency ?? {};
+  const loading = isIncomeMode ? incomesLoading || incomesFetching : paymentsLoading || paymentsFetching;
+  const error = isIncomeMode ? incomesError : paymentsError;
 
   const rangeFrom = reportTotal === 0 ? 0 : (page - 1) * PREVIEW_PAGE_SIZE + 1;
   const rangeTo = Math.min(page * PREVIEW_PAGE_SIZE, reportTotal);
@@ -160,13 +198,19 @@ export function Reports() {
     setEndDate('');
     setCategory('');
     setStatus('');
+    setIncomeCustomerType('');
+    setIncomePaymentMethod('');
+    setIncomeDigitalService('');
+    setIncomePeriod('day');
     setQInput('');
   };
 
   const dateHint =
     mode === 'pagos'
       ? 'Las fechas filtran por el día en que se registró el pago (pagos ejecutados).'
-      : 'Las fechas filtran por el día en que se creó la solicitud.';
+      : mode === 'ingresos'
+        ? 'Las fechas filtran por la fecha del ingreso registrado.'
+        : 'Las fechas filtran por el día en que se creó la solicitud.';
 
   return (
     <div className="space-y-8" ref={containerRef}>
@@ -210,6 +254,16 @@ export function Reports() {
           onClick={() => setMode('pagos')}
         >
           Pagos ejecutados
+        </button>
+        <button
+          type="button"
+          className={cn(
+            'rounded-lg px-4 py-2 text-sm font-medium transition-all',
+            mode === 'ingresos' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+          )}
+          onClick={() => setMode('ingresos')}
+        >
+          Ingresos
         </button>
       </div>
 
@@ -267,8 +321,59 @@ export function Reports() {
               </Select>
             </div>
           )}
+          {mode === 'ingresos' && (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Tipo de cliente</label>
+                <Select value={incomeCustomerType || 'all'} onValueChange={(v) => setIncomeCustomerType(v === 'all' ? '' : (v as IncomeCustomerType))}>
+                  <SelectTrigger className="bg-background/70"><SelectValue placeholder="Todos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="CLIENTE">Cliente</SelectItem>
+                    <SelectItem value="DESTACADO">Destacado</SelectItem>
+                    <SelectItem value="RICACHON">Ricachon</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Metodo de pago</label>
+                <Select value={incomePaymentMethod || 'all'} onValueChange={(v) => setIncomePaymentMethod(v === 'all' ? '' : (v as IncomePaymentMethod))}>
+                  <SelectTrigger className="bg-background/70"><SelectValue placeholder="Todos" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="NEQUI">Nequi</SelectItem>
+                    <SelectItem value="DAVIPLATA">Daviplata</SelectItem>
+                    <SelectItem value="BANCOLOMBIA">Bancolombia</SelectItem>
+                    <SelectItem value="PAYPAL">Paypal</SelectItem>
+                    <SelectItem value="OTRO">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Servicio digital</label>
+                <Input
+                  placeholder="Ej. Diseno de avatar"
+                  value={incomeDigitalService}
+                  onChange={(e) => setIncomeDigitalService(e.target.value)}
+                  className="bg-background/70"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Agrupar por</label>
+                <Select value={incomePeriod} onValueChange={(v) => setIncomePeriod(v as 'day' | 'week' | 'month' | 'year')}>
+                  <SelectTrigger className="bg-background/70"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="day">Diario</SelectItem>
+                    <SelectItem value="week">Semanal</SelectItem>
+                    <SelectItem value="month">Mensual</SelectItem>
+                    <SelectItem value="year">Anual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button" variant="secondary" size="sm" className="gap-2" onClick={() => refetch()} disabled={loading}>
+            <Button type="button" variant="secondary" size="sm" className="gap-2" onClick={() => (isIncomeMode ? refetchIncomes() : refetchPayments())} disabled={loading}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               Actualizar vista
             </Button>
@@ -302,7 +407,7 @@ export function Reports() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[110px]">Fecha sol.</TableHead>
+                  <TableHead className="w-[110px]">{mode === 'ingresos' ? 'Fecha' : 'Fecha sol.'}</TableHead>
                   {mode === 'pagos' && <TableHead className="w-[110px]">Fecha pago</TableHead>}
                   <TableHead>Concepto</TableHead>
                   <TableHead className="w-[120px] hidden md:table-cell">Categoría</TableHead>
@@ -315,7 +420,9 @@ export function Reports() {
               <TableBody>
                 {reports.map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell className="text-muted-foreground whitespace-nowrap text-xs">{formatShortDate(r.createdAt)}</TableCell>
+                    <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
+                      {formatShortDate((r as any).date ?? r.createdAt)}
+                    </TableCell>
                     {mode === 'pagos' && (
                       <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
                         {formatShortDate(r.paidAt)}
@@ -324,34 +431,38 @@ export function Reports() {
                     <TableCell>
                       <div className="max-w-[min(28rem,55vw)]">
                         <p className="font-medium leading-snug line-clamp-2" title={r.concept}>
-                          {r.concept || '—'}
+                          {(r as any).concept || (r as any).digitalService || '—'}
                         </p>
-                        {r.description ? (
+                        {(r as any).description ? (
                           <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5" title={r.description}>
                             {r.description}
                           </p>
                         ) : null}
-                        {r.paymentMethod ? (
+                        {(r as any).paymentMethod ? (
                           <p
                             className="text-xs text-muted-foreground line-clamp-1 mt-0.5"
-                            title={`${paymentMethodLabel(r.paymentMethod)}${r.paymentMethodDetail ? ` — ${r.paymentMethodDetail}` : ''}`}
+                            title={`${(r as any).paymentMethod}${(r as any).paymentMethodDetail ? ` — ${(r as any).paymentMethodDetail}` : ''}`}
                           >
-                            <span className="font-medium text-foreground/70">{paymentMethodLabel(r.paymentMethod)}</span>
-                            {r.paymentMethodDetail ? ` · ${r.paymentMethodDetail}` : ''}
+                            <span className="font-medium text-foreground/70">{(r as any).paymentMethod}</span>
+                            {(r as any).paymentMethodDetail ? ` · ${(r as any).paymentMethodDetail}` : ''}
                           </p>
                         ) : null}
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">{r.category || '—'}</TableCell>
-                    <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{r.currency ?? 'COP'}</TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">{(r as any).category || (r as any).customerType || '—'}</TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">{(r as any).currency ?? 'COP'}</TableCell>
                     <TableCell className="text-right tabular-nums font-medium">
-                      {formatCurrencyAmount(Number(r.amount ?? 0), (r.currency ?? 'COP') as CurrencyCode)}
+                      {formatCurrencyAmount(Number((r as any).amount ?? (r as any).soldAmount ?? 0), ((r as any).currency ?? 'COP') as CurrencyCode)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={statusBadgeVariant(r.status)}>{statusLabel(r.status)}</Badge>
+                      {mode === 'ingresos' ? (
+                        <Badge variant="secondary">{(r as any).paymentMethod}</Badge>
+                      ) : (
+                        <Badge variant={statusBadgeVariant((r as any).status)}>{statusLabel((r as any).status)}</Badge>
+                      )}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-muted-foreground text-sm">
-                      {r.user?.name || '—'}
+                      {(r as any).user?.name || (r as any).createdBy?.name || '—'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -416,7 +527,7 @@ export function Reports() {
               ) : Object.keys(amountByCurrency).length === 0 ? (
                 <span className="text-2xl font-bold tabular-nums">—</span>
               ) : (
-                Object.entries(amountByCurrency).map(([cur, n]) => (
+                Object.entries(amountByCurrency as Record<string, number>).map(([cur, n]) => (
                   <div key={cur} className="text-lg font-bold tabular-nums">
                     {formatCurrencyAmount(n, cur as CurrencyCode)}
                   </div>
@@ -429,7 +540,7 @@ export function Reports() {
         <Card className="gsap-item liquid-glass">
           <CardContent className="pt-6">
             <div className="text-2xl font-bold tabular-nums text-amber-600">
-              {loading ? '—' : pendingCountAgg}
+              {loading ? '—' : isIncomeMode ? reportTotal : pendingCountAgg}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Pendientes (total filtrado)</p>
           </CardContent>
@@ -439,19 +550,23 @@ export function Reports() {
             <div className="space-y-0.5 text-indigo-600">
               {loading ? (
                 '—'
-              ) : Object.keys(approvedAmountByCurrency).length > 0 ? (
-                Object.entries(approvedAmountByCurrency).map(([cur, n]) => (
+              ) : !isIncomeMode && Object.keys(approvedAmountByCurrency).length > 0 ? (
+                Object.entries(approvedAmountByCurrency as Record<string, number>).map(([cur, n]) => (
                   <div key={cur} className="text-lg font-bold tabular-nums">
                     {formatCurrencyAmount(n, cur as CurrencyCode)}
                   </div>
                 ))
               ) : (
                 <span className="text-2xl font-bold tabular-nums">
-                  {approvedAmountAgg === 0 ? '—' : approvedAmountAgg.toLocaleString('es-CO')}
+                  {isIncomeMode
+                    ? formatCurrencyAmount((agg as any)?.receivedTotal ?? 0, 'COP')
+                    : approvedAmountAgg === 0
+                      ? '—'
+                      : approvedAmountAgg.toLocaleString('es-CO')}
                 </span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Solo aprobadas (monto por moneda)</p>
+            <p className="text-xs text-muted-foreground mt-1">{isIncomeMode ? 'Total recibido (COP)' : 'Solo aprobadas (monto por moneda)'}</p>
           </CardContent>
         </Card>
       </div>

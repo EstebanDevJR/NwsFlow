@@ -34,6 +34,20 @@ enum PaymentMethod {
   PAYPAL
 }
 
+enum IncomeCustomerType {
+  CLIENTE
+  DESTACADO
+  RICACHON
+}
+
+enum IncomePaymentMethod {
+  NEQUI
+  DAVIPLATA
+  BANCOLOMBIA
+  PAYPAL
+  OTRO
+}
+
 enum MeetingStatus {
   PENDING
   CONFIRMED
@@ -68,6 +82,7 @@ model User {
   chatConversationsHigh ChatConversation[] @relation("ChatConvHigh")
   chatMessagesSent      ChatMessage[]
   chatReads             ChatConversationRead[]
+  incomeRecords         IncomeRecord[]
 }
 
 /// Conversación 1:1; participantLowId & participantHighId ordenados lexicográficamente (id cuid).
@@ -288,4 +303,26 @@ model SlaRule {
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model IncomeRecord {
+  id                 String              @id @default(cuid())
+  date               DateTime
+  customerType       IncomeCustomerType
+  paymentMethod      IncomePaymentMethod
+  paymentMethodOther String?
+  digitalService     String
+  soldAmount         Decimal             @db.Decimal(12, 2)
+  receivedAmount     Decimal             @db.Decimal(12, 2)
+  note               String?             @db.Text
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  createdById        String
+  createdBy          User                @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([customerType])
+  @@index([paymentMethod])
+  @@index([digitalService])
 }

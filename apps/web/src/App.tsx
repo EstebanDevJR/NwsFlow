@@ -15,6 +15,7 @@ import { Approvals } from '@/pages/Approvals';
 import { Payments } from '@/pages/Payments';
 import { History } from '@/pages/History';
 import { Reports } from '@/pages/Reports';
+import { Incomes } from '@/pages/Incomes';
 import { Users } from '@/pages/Users';
 import { ExecutedPayments } from '@/pages/ExecutedPayments';
 import { Meetings } from '@/pages/Meetings';
@@ -56,6 +57,7 @@ function AppContent() {
           }
         />
         <Route path="reports" element={<ProtectedRoute allowedRoles={['HOLDER']}><Reports /></ProtectedRoute>} />
+        <Route path="incomes" element={<ProtectedRoute allowedRoles={['HOLDER', 'CAJERO']}><Incomes /></ProtectedRoute>} />
         <Route path="users" element={<ProtectedRoute allowedRoles={['HOLDER']}><Users /></ProtectedRoute>} />
         <Route path="executed" element={<ProtectedRoute allowedRoles={['HOLDER', 'CAJERO']}><ExecutedPayments /></ProtectedRoute>} />
         <Route path="meetings" element={<ProtectedRoute allowedRoles={['LIDER', 'HOLDER']}><Meetings /></ProtectedRoute>} />

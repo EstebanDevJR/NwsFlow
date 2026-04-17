@@ -121,7 +121,7 @@ export function Meetings() {
 
   const fetchHolders = async () => {
     try {
-      const list = await api.get<Array<{ id: string; name: string; email: string }>>('/users/holders');
+      const list = await api.get<Array<{ id: string; name: string; email: string }>>('/users?role=HOLDER&status=active');
       setHolders(list);
     } catch (err) {
       console.error('Failed to fetch holders', err);
