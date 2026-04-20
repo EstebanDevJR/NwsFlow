@@ -230,6 +230,7 @@ export function useUploadEvidence(paymentId: string) {
 
 export type IncomeCustomerType = 'CLIENTE' | 'DESTACADO' | 'RICACHON';
 export type IncomePaymentMethod = 'NEQUI' | 'DAVIPLATA' | 'BANCOLOMBIA' | 'PAYPAL' | 'OTRO';
+export type IncomeCurrency = 'COP' | 'USD';
 
 export interface IncomeRecord {
   id: string;
@@ -237,6 +238,7 @@ export interface IncomeRecord {
   customerType: IncomeCustomerType;
   paymentMethod: IncomePaymentMethod;
   paymentMethodOther?: string | null;
+  currency: IncomeCurrency;
   digitalService: string;
   receivedAmount: number;
   note?: string | null;
@@ -254,6 +256,7 @@ export interface IncomeListResponse {
     aggregates: {
       quantityTotal: number;
       receivedTotal: number;
+      receivedByCurrency: Record<string, number>;
       recordsCount: number;
     };
   };
@@ -264,6 +267,7 @@ export interface IncomeSummaryResponse {
   totals: {
     quantityTotal: number;
     receivedTotal: number;
+    receivedByCurrency: Record<string, number>;
     recordsCount: number;
   };
   timeline: Array<{
@@ -297,6 +301,7 @@ export function useIncomes(filters?: {
   endDate?: string;
   customerType?: IncomeCustomerType;
   paymentMethod?: IncomePaymentMethod;
+  currency?: IncomeCurrency;
   digitalService?: string;
   page?: number;
   limit?: number;
@@ -309,6 +314,7 @@ export function useIncomes(filters?: {
       if (filters?.endDate) params.append('endDate', filters.endDate);
       if (filters?.customerType) params.append('customerType', filters.customerType);
       if (filters?.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+      if (filters?.currency) params.append('currency', filters.currency);
       if (filters?.digitalService) params.append('digitalService', filters.digitalService);
       if (filters?.page) params.append('page', String(filters.page));
       if (filters?.limit) params.append('limit', String(filters.limit));
@@ -322,6 +328,7 @@ export function useIncomeSummary(filters?: {
   endDate?: string;
   customerType?: IncomeCustomerType;
   paymentMethod?: IncomePaymentMethod;
+  currency?: IncomeCurrency;
   digitalService?: string;
   period?: 'day' | 'week' | 'month' | 'year';
 }) {
@@ -333,6 +340,7 @@ export function useIncomeSummary(filters?: {
       if (filters?.endDate) params.append('endDate', filters.endDate);
       if (filters?.customerType) params.append('customerType', filters.customerType);
       if (filters?.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+      if (filters?.currency) params.append('currency', filters.currency);
       if (filters?.digitalService) params.append('digitalService', filters.digitalService);
       if (filters?.period) params.append('period', filters.period);
       return api.get<IncomeSummaryResponse>(`/incomes/summary?${params.toString()}`);
@@ -348,6 +356,7 @@ export function useCreateIncome() {
       customerType: IncomeCustomerType;
       paymentMethod: IncomePaymentMethod;
       paymentMethodOther?: string;
+      currency: IncomeCurrency;
       digitalService: string;
       receivedAmount: number;
       note?: string;
@@ -364,6 +373,7 @@ export function useIncomeReports(filters?: {
   endDate?: string;
   customerType?: IncomeCustomerType;
   paymentMethod?: IncomePaymentMethod;
+  currency?: IncomeCurrency;
   digitalService?: string;
   period?: 'day' | 'week' | 'month' | 'year';
   page?: number;
@@ -377,6 +387,7 @@ export function useIncomeReports(filters?: {
       if (filters?.endDate) params.append('endDate', filters.endDate);
       if (filters?.customerType) params.append('customerType', filters.customerType);
       if (filters?.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+      if (filters?.currency) params.append('currency', filters.currency);
       if (filters?.digitalService) params.append('digitalService', filters.digitalService);
       if (filters?.period) params.append('period', filters.period);
       if (filters?.page) params.append('page', String(filters.page));
@@ -391,6 +402,7 @@ export function useIncomeReports(filters?: {
           aggregates: {
             quantityTotal: number;
             receivedTotal: number;
+            receivedByCurrency: Record<string, number>;
             recordsCount: number;
           };
           timeline: Array<{ bucket: string; quantityTotal: number; receivedTotal: number; recordsCount: number }>;

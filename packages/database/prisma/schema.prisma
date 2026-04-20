@@ -311,6 +311,7 @@ model IncomeRecord {
   customerType       IncomeCustomerType
   paymentMethod      IncomePaymentMethod
   paymentMethodOther String?
+  currency           CurrencyCode        @default(COP)
   digitalService     String
   soldAmount         Decimal             @db.Decimal(12, 2)
   receivedAmount     Decimal             @db.Decimal(12, 2)

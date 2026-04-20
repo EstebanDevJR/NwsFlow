@@ -12,6 +12,7 @@ const createIncomeSchema = z
     customerType: z.enum(['CLIENTE', 'DESTACADO', 'RICACHON']),
     paymentMethod: z.enum(['NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'PAYPAL', 'OTRO']),
     paymentMethodOther: z.string().trim().max(120).optional(),
+    currency: z.enum(['COP', 'USD']).default('COP'),
     digitalService: z
       .string()
       .trim()
@@ -34,6 +35,7 @@ const incomeFiltersSchema = z.object({
   endDate: z.string().optional(),
   customerType: z.enum(['CLIENTE', 'DESTACADO', 'RICACHON']).optional(),
   paymentMethod: z.enum(['NEQUI', 'DAVIPLATA', 'BANCOLOMBIA', 'PAYPAL', 'OTRO']).optional(),
+  currency: z.enum(['COP', 'USD']).optional(),
   digitalService: z.string().optional(),
   period: z.enum(['day', 'week', 'month', 'year']).default('day'),
   page: z.coerce.number().int().min(1).default(1),
@@ -79,6 +81,7 @@ function buildWhere(filters: z.infer<typeof incomeFiltersSchema>) {
   }
   if (filters.customerType) where.customerType = filters.customerType;
   if (filters.paymentMethod) where.paymentMethod = filters.paymentMethod;
+  if (filters.currency) where.currency = filters.currency;
   if (filters.digitalService?.trim()) where.digitalService = filters.digitalService.trim();
   return where;
 }
@@ -92,6 +95,7 @@ router.post('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
         customerType: data.customerType,
         paymentMethod: data.paymentMethod,
         paymentMethodOther: data.paymentMethod === 'OTRO' ? data.paymentMethodOther?.trim() : null,
+        currency: data.currency,
         digitalService: data.digitalService.trim(),
         soldAmount: 0,
         receivedAmount: data.receivedAmount,
@@ -118,11 +122,12 @@ router.get('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
       ${where['date'] ? Prisma.sql`AND "date" >= ${(where['date'] as Record<string, Date>).gte ?? new Date(0)} AND "date" <= ${(where['date'] as Record<string, Date>).lte ?? new Date('9999-12-31')}` : Prisma.empty}
       ${where['customerType'] ? Prisma.sql`AND "customerType" = ${where['customerType'] as string}::"IncomeCustomerType"` : Prisma.empty}
       ${where['paymentMethod'] ? Prisma.sql`AND "paymentMethod" = ${where['paymentMethod'] as string}::"IncomePaymentMethod"` : Prisma.empty}
+      ${where['currency'] ? Prisma.sql`AND "currency" = ${where['currency'] as string}::"CurrencyCode"` : Prisma.empty}
       ${where['digitalService'] ? Prisma.sql`AND "digitalService" = ${where['digitalService'] as string}` : Prisma.empty}
     `;
 
     type QuantityTotalRow = { quantityTotal: string | number };
-    const [rows, total, totals, quantityTotals] = await Promise.all([
+    const [rows, total, totals, quantityTotals, receivedByCurrencyAgg] = await Promise.all([
       prisma.incomeRecord.findMany({
         where,
         include: { createdBy: { select: { id: true, name: true, role: true } } },
@@ -137,7 +142,17 @@ router.get('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
         FROM "IncomeRecord"
         ${whereSql}
       `),
+      prisma.incomeRecord.groupBy({
+        by: ['currency'],
+        where,
+        _sum: { receivedAmount: true },
+      }),
     ]);
+
+    const receivedByCurrency: Record<string, number> = {};
+    for (const row of receivedByCurrencyAgg) {
+      receivedByCurrency[row.currency] = Number(row._sum.receivedAmount ?? 0);
+    }
 
     return res.json({
       data: rows,
@@ -149,6 +164,7 @@ router.get('/', requireRole('HOLDER', 'CAJERO'), async (req, res, next) => {
         aggregates: {
           quantityTotal: Number(quantityTotals[0]?.quantityTotal ?? 0),
           receivedTotal: Number(totals._sum.receivedAmount ?? 0),
+          receivedByCurrency,
           recordsCount: totals._count._all,
         },
       },
@@ -168,10 +184,11 @@ router.get('/summary', requireRole('HOLDER', 'CAJERO'), async (req, res, next) =
       ${where['date'] ? Prisma.sql`AND "date" >= ${(where['date'] as Record<string, Date>).gte ?? new Date(0)} AND "date" <= ${(where['date'] as Record<string, Date>).lte ?? new Date('9999-12-31')}` : Prisma.empty}
       ${where['customerType'] ? Prisma.sql`AND "customerType" = ${where['customerType'] as string}::"IncomeCustomerType"` : Prisma.empty}
       ${where['paymentMethod'] ? Prisma.sql`AND "paymentMethod" = ${where['paymentMethod'] as string}::"IncomePaymentMethod"` : Prisma.empty}
+      ${where['currency'] ? Prisma.sql`AND "currency" = ${where['currency'] as string}::"CurrencyCode"` : Prisma.empty}
       ${where['digitalService'] ? Prisma.sql`AND "digitalService" = ${where['digitalService'] as string}` : Prisma.empty}
     `;
 
-    const [totals, timeline, byPaymentMethod, byService, byCustomerType] = await Promise.all([
+    const [totals, timeline, byPaymentMethod, byService, byCustomerType, receivedByCurrencyAgg] = await Promise.all([
       prisma.incomeRecord.aggregate({ where, _sum: { receivedAmount: true }, _count: { _all: true } }),
       prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
         SELECT
@@ -217,13 +234,24 @@ router.get('/summary', requireRole('HOLDER', 'CAJERO'), async (req, res, next) =
         GROUP BY "customerType"
         ORDER BY "receivedTotal" DESC
       `),
+      prisma.incomeRecord.groupBy({
+        by: ['currency'],
+        where,
+        _sum: { receivedAmount: true },
+      }),
     ]);
+
+    const receivedByCurrency: Record<string, number> = {};
+    for (const row of receivedByCurrencyAgg) {
+      receivedByCurrency[row.currency] = Number(row._sum.receivedAmount ?? 0);
+    }
 
     return res.json({
       period,
       totals: {
         quantityTotal: timeline.reduce((acc, row) => acc + asNumber(row.quantityTotal), 0),
         receivedTotal: Number(totals._sum.receivedAmount ?? 0),
+        receivedByCurrency,
         recordsCount: totals._count._all,
       },
       timeline: timeline.map((row) => ({

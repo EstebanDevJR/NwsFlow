@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import gsap from 'gsap';
 import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Filter, Loader2, RefreshCw } from 'lucide-react';
-import { useReports, useIncomeReports, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
+import { useReports, useIncomeReports, type IncomeCurrency, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { downloadReportFile } from '@/lib/reportDownload';
 import { cn } from '@/lib/utils';
@@ -75,6 +75,7 @@ export function Reports() {
   const [qInput, setQInput] = useState('');
   const [incomeCustomerType, setIncomeCustomerType] = useState<IncomeCustomerType | ''>('');
   const [incomePaymentMethod, setIncomePaymentMethod] = useState<IncomePaymentMethod | ''>('');
+  const [incomeCurrency, setIncomeCurrency] = useState<IncomeCurrency | ''>('');
   const [incomeDigitalService, setIncomeDigitalService] = useState('');
   const [incomePeriod, setIncomePeriod] = useState<'day' | 'week' | 'month' | 'year'>('day');
   const qDebounced = useDebouncedValue(qInput, 400);
@@ -118,6 +119,7 @@ export function Reports() {
     endDate: endDate || undefined,
     customerType: incomeCustomerType || undefined,
     paymentMethod: incomePaymentMethod || undefined,
+    currency: incomeCurrency || undefined,
     digitalService: incomeDigitalService.trim() || undefined,
     period: incomePeriod,
     page,
@@ -170,6 +172,7 @@ export function Reports() {
     if (mode === 'ingresos') {
       if (incomeCustomerType) p.append('customerType', incomeCustomerType);
       if (incomePaymentMethod) p.append('paymentMethod', incomePaymentMethod);
+      if (incomeCurrency) p.append('currency', incomeCurrency);
       if (incomeDigitalService.trim()) p.append('digitalService', incomeDigitalService.trim());
       p.append('period', incomePeriod);
     }
@@ -206,6 +209,7 @@ export function Reports() {
     setStatus('');
     setIncomeCustomerType('');
     setIncomePaymentMethod('');
+    setIncomeCurrency('');
     setIncomeDigitalService('');
     setIncomePeriod('day');
     setQInput('');
@@ -360,6 +364,17 @@ export function Reports() {
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Moneda</label>
+                <Select value={incomeCurrency || 'all'} onValueChange={(v) => setIncomeCurrency(v === 'all' ? '' : (v as IncomeCurrency))}>
+                  <SelectTrigger className="bg-background/70"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="COP">COP</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground">Cant. servicio digital</label>
                 <Input
                   placeholder="Ej. 1000"
@@ -368,7 +383,7 @@ export function Reports() {
                   className="bg-background/70"
                 />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 lg:col-span-1">
                 <label className="text-xs font-medium text-muted-foreground">Agrupar por</label>
                 <Select value={incomePeriod} onValueChange={(v) => setIncomePeriod(v as 'day' | 'week' | 'month' | 'year')}>
                   <SelectTrigger className="bg-background/70"><SelectValue /></SelectTrigger>
@@ -423,9 +438,10 @@ export function Reports() {
                   <TableHead className="w-[120px] hidden md:table-cell">
                     {mode === 'ingresos' ? 'Tipo cliente' : 'Categoría'}
                   </TableHead>
-                  <TableHead className="w-[72px] hidden sm:table-cell">{mode === 'ingresos' ? 'Método' : 'Moneda'}</TableHead>
+                  <TableHead className="w-[90px] hidden sm:table-cell">{mode === 'ingresos' ? 'Método' : 'Moneda'}</TableHead>
                   <TableHead className="text-right w-[120px]">{mode === 'ingresos' ? 'Cantidad' : 'Monto'}</TableHead>
-                  <TableHead className="w-[110px]">{mode === 'ingresos' ? 'Recibido' : 'Estado'}</TableHead>
+                  <TableHead className="w-[80px]">{mode === 'ingresos' ? 'Moneda' : 'Estado'}</TableHead>
+                  {mode === 'ingresos' && <TableHead className="w-[130px]">Recibido</TableHead>}
                   <TableHead className="min-w-[140px] hidden lg:table-cell">{mode === 'ingresos' ? 'Registrado por' : 'Solicitante'}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -480,20 +496,19 @@ export function Reports() {
                     </TableCell>
                     <TableCell>
                       {mode === 'ingresos' ? (
-                        <div className="flex flex-col gap-1">
-                          <Badge variant="secondary">
-                            {formatCurrencyAmount(Number((r as any).receivedAmount ?? 0), 'COP')}
-                          </Badge>
-                          {(r as any).paymentMethod === 'OTRO' && (r as any).paymentMethodOther ? (
-                            <span className="text-[10px] text-muted-foreground">
-                              OTRO: {(r as any).paymentMethodOther}
-                            </span>
-                          ) : null}
-                        </div>
+                        <Badge variant="secondary">{(r as any).currency ?? 'COP'}</Badge>
                       ) : (
                         <Badge variant={statusBadgeVariant((r as any).status)}>{statusLabel((r as any).status)}</Badge>
                       )}
                     </TableCell>
+                    {mode === 'ingresos' && (
+                      <TableCell className="text-right">
+                        {formatCurrencyAmount(
+                          Number((r as any).receivedAmount ?? 0),
+                          ((r as any).currency ?? 'COP') as CurrencyCode
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="hidden lg:table-cell text-muted-foreground text-sm">
                       {(r as any).user?.name || (r as any).createdBy?.name || '—'}
                     </TableCell>
@@ -600,7 +615,11 @@ export function Reports() {
               ) : (
                 <span className="text-2xl font-bold tabular-nums">
                   {isIncomeMode
-                    ? formatCurrencyAmount((agg as any)?.receivedTotal ?? 0, 'COP')
+                    ? Object.entries(((agg as any)?.receivedByCurrency ?? {}) as Record<string, number>).length > 0
+                      ? Object.entries(((agg as any)?.receivedByCurrency ?? {}) as Record<string, number>)
+                          .map(([cur, n]) => formatCurrencyAmount(n, cur as CurrencyCode))
+                          .join(' · ')
+                      : '—'
                     : approvedAmountAgg === 0
                       ? '—'
                       : approvedAmountAgg.toLocaleString('es-CO')}
@@ -703,7 +722,11 @@ export function Reports() {
                 incomeByPaymentMethod.map((row) => (
                   <div key={row.label} className="flex items-center justify-between rounded-md border border-border/50 px-3 py-2">
                     <span className="text-sm font-medium">{row.label}</span>
-                    <span className="text-sm tabular-nums">{formatCurrencyAmount(row.receivedTotal, 'COP')}</span>
+                    <span className="text-sm tabular-nums">
+                      {incomeCurrency
+                        ? formatCurrencyAmount(row.receivedTotal, incomeCurrency as CurrencyCode)
+                        : Number(row.receivedTotal).toLocaleString('es-CO')}
+                    </span>
                   </div>
                 ))
               )}
@@ -746,7 +769,11 @@ export function Reports() {
                   <div key={row.bucket} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-md border border-border/50 px-3 py-2">
                     <span className="text-sm text-muted-foreground">{formatShortDate(row.bucket)}</span>
                     <span className="text-sm tabular-nums">{Number(row.quantityTotal).toLocaleString('es-CO')}</span>
-                    <span className="text-sm tabular-nums font-medium">{formatCurrencyAmount(row.receivedTotal, 'COP')}</span>
+                    <span className="text-sm tabular-nums font-medium">
+                      {incomeCurrency
+                        ? formatCurrencyAmount(row.receivedTotal, incomeCurrency as CurrencyCode)
+                        : Number(row.receivedTotal).toLocaleString('es-CO')}
+                    </span>
                   </div>
                 ))
               )}

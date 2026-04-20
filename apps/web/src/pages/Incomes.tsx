@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
-import { useCreateIncome, useIncomes, useIncomeSummary, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
-import { formatCurrencyAmount } from '@paymentflow/shared';
+import { useCreateIncome, useIncomes, useIncomeSummary, type IncomeCurrency, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
+import { formatCurrencyAmount, type CurrencyCode } from '@paymentflow/shared';
 import { Loader2 } from 'lucide-react';
 
 const paymentMethodLabel: Record<IncomePaymentMethod, string> = {
@@ -28,6 +28,7 @@ export function Incomes() {
   const [customerType, setCustomerType] = useState<IncomeCustomerType>('CLIENTE');
   const [paymentMethod, setPaymentMethod] = useState<IncomePaymentMethod>('NEQUI');
   const [paymentMethodOther, setPaymentMethodOther] = useState('');
+  const [currency, setCurrency] = useState<IncomeCurrency>('COP');
   const [digitalService, setDigitalService] = useState('');
   const [receivedAmount, setReceivedAmount] = useState('');
   const [note, setNote] = useState('');
@@ -61,6 +62,7 @@ export function Incomes() {
       customerType,
       paymentMethod,
       paymentMethodOther: paymentMethod === 'OTRO' ? paymentMethodOther.trim() : undefined,
+      currency,
       digitalService: digitalService.trim(),
       receivedAmount: Number(receivedAmount),
       note: note.trim() || undefined,
@@ -73,7 +75,7 @@ export function Incomes() {
   };
 
   const totalQuantity = summaryRes?.totals.quantityTotal ?? 0;
-  const totalReceived = summaryRes?.totals.receivedTotal ?? 0;
+  const totalReceivedByCurrency = summaryRes?.totals.receivedByCurrency ?? {};
   const totalRecords = summaryRes?.totals.recordsCount ?? 0;
 
   return (
@@ -139,8 +141,25 @@ export function Incomes() {
 
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1.5">
+                <Label>Moneda</Label>
+                <Select value={currency} onValueChange={(v) => setCurrency(v as IncomeCurrency)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="COP">COP</SelectItem>
+                    <SelectItem value="USD">USD</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
                 <Label>Total recibido</Label>
-                <Input type="number" min="0" step="0.01" placeholder="0.00" value={receivedAmount} onChange={(e) => setReceivedAmount(e.target.value)} />
+                <Input
+                  type="number"
+                  min="0"
+                  step={currency === 'COP' ? '1' : '0.01'}
+                  placeholder={currency === 'COP' ? '1000' : '0.00'}
+                  value={receivedAmount}
+                  onChange={(e) => setReceivedAmount(e.target.value)}
+                />
               </div>
               {paymentMethod === 'OTRO' && (
                 <div className="space-y-1.5">
@@ -190,7 +209,17 @@ export function Incomes() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Total vendido</p>
-            <p className="text-2xl font-semibold">{formatCurrencyAmount(totalReceived, 'COP')}</p>
+            {Object.keys(totalReceivedByCurrency).length === 0 ? (
+              <p className="text-2xl font-semibold">—</p>
+            ) : (
+              <div className="space-y-1">
+                {Object.entries(totalReceivedByCurrency).map(([cur, n]) => (
+                  <p key={cur} className="text-xl font-semibold">
+                    {formatCurrencyAmount(n, cur as CurrencyCode)}
+                  </p>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -214,7 +243,7 @@ export function Incomes() {
             {(summaryRes?.byPaymentMethod ?? []).map((x) => (
               <div key={x.label} className="flex items-center justify-between border-b border-border/40 pb-2">
                 <span>{paymentMethodLabel[x.label as IncomePaymentMethod] ?? x.label}</span>
-                <span>{formatCurrencyAmount(x.receivedTotal, 'COP')}</span>
+                <span>{Number(x.receivedTotal).toLocaleString('es-CO')}</span>
               </div>
             ))}
           </CardContent>
@@ -257,6 +286,7 @@ export function Incomes() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Método</TableHead>
                   <TableHead>Activo vendido</TableHead>
+                  <TableHead>Moneda</TableHead>
                   <TableHead className="text-right">$ Recibido</TableHead>
                 </TableRow>
               </TableHeader>
@@ -267,7 +297,8 @@ export function Incomes() {
                     <TableCell>{customerTypeLabel[r.customerType]}</TableCell>
                     <TableCell>{paymentMethodLabel[r.paymentMethod]}{r.paymentMethod === 'OTRO' && r.paymentMethodOther ? ` (${r.paymentMethodOther})` : ''}</TableCell>
                     <TableCell>{r.digitalService}</TableCell>
-                    <TableCell className="text-right">{formatCurrencyAmount(Number(r.receivedAmount), 'COP')}</TableCell>
+                    <TableCell>{r.currency}</TableCell>
+                    <TableCell className="text-right">{formatCurrencyAmount(Number(r.receivedAmount), r.currency as CurrencyCode)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

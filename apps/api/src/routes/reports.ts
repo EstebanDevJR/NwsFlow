@@ -74,6 +74,7 @@ function buildIncomeWhere(query: {
   endDate?: string;
   customerType?: string;
   paymentMethod?: string;
+  currency?: string;
   digitalService?: string;
 }) {
   const where: Record<string, unknown> = {};
@@ -84,6 +85,7 @@ function buildIncomeWhere(query: {
   }
   if (query.customerType) where.customerType = query.customerType;
   if (query.paymentMethod) where.paymentMethod = query.paymentMethod;
+  if (query.currency) where.currency = query.currency;
   if (query.digitalService?.trim()) where.digitalService = query.digitalService.trim();
   return where;
 }
@@ -542,12 +544,13 @@ router.get('/dashboard', requireRole('HOLDER'), async (_req, res, next) => {
 
 router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
   try {
-    const { startDate, endDate, customerType, paymentMethod, digitalService, period, page, limit } = req.query;
+    const { startDate, endDate, customerType, paymentMethod, currency, digitalService, period, page, limit } = req.query;
     const where = buildIncomeWhere({
       startDate: startDate as string | undefined,
       endDate: endDate as string | undefined,
       customerType: customerType as string | undefined,
       paymentMethod: paymentMethod as string | undefined,
+      currency: currency as string | undefined,
       digitalService: digitalService as string | undefined,
     });
     const selectedPeriod = (period as 'day' | 'week' | 'month' | 'year' | undefined) ?? 'day';
@@ -573,10 +576,11 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
       ${where['date'] ? Prisma.sql`AND "date" >= ${(where['date'] as Record<string, Date>).gte ?? new Date(0)} AND "date" <= ${(where['date'] as Record<string, Date>).lte ?? new Date('9999-12-31')}` : Prisma.empty}
       ${where['customerType'] ? Prisma.sql`AND "customerType" = ${where['customerType'] as string}::"IncomeCustomerType"` : Prisma.empty}
       ${where['paymentMethod'] ? Prisma.sql`AND "paymentMethod" = ${where['paymentMethod'] as string}::"IncomePaymentMethod"` : Prisma.empty}
+      ${where['currency'] ? Prisma.sql`AND "currency" = ${where['currency'] as string}::"CurrencyCode"` : Prisma.empty}
       ${where['digitalService'] ? Prisma.sql`AND "digitalService" = ${where['digitalService'] as string}` : Prisma.empty}
     `;
 
-    const [rows, total, totals, timeline, byPaymentMethod, byCustomerType, byDigitalService] = await Promise.all([
+    const [rows, total, totals, timeline, byPaymentMethod, byCustomerType, byDigitalService, receivedByCurrencyAgg] = await Promise.all([
       prisma.incomeRecord.findMany({
         where,
         include: { createdBy: { select: { id: true, name: true, role: true } } },
@@ -630,7 +634,17 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
         GROUP BY "digitalService"
         ORDER BY "receivedTotal" DESC
       `),
+      prisma.incomeRecord.groupBy({
+        by: ['currency'],
+        where,
+        _sum: { receivedAmount: true },
+      }),
     ]);
+
+    const receivedByCurrency: Record<string, number> = {};
+    for (const row of receivedByCurrencyAgg) {
+      receivedByCurrency[row.currency] = Number(row._sum.receivedAmount ?? 0);
+    }
 
     res.json({
       data: rows,
@@ -642,6 +656,7 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
         aggregates: {
           quantityTotal: timeline.reduce((acc, x) => acc + Number(x.quantityTotal ?? 0), 0),
           receivedTotal: Number(totals._sum.receivedAmount ?? 0),
+          receivedByCurrency,
           recordsCount: totals._count._all,
         },
         timeline: timeline.map((x) => ({
@@ -677,12 +692,13 @@ router.get('/incomes', requireRole('HOLDER'), async (req, res, next) => {
 
 router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next) => {
   try {
-    const { startDate, endDate, customerType, paymentMethod, digitalService } = req.query;
+    const { startDate, endDate, customerType, paymentMethod, currency, digitalService } = req.query;
     const where = buildIncomeWhere({
       startDate: startDate as string | undefined,
       endDate: endDate as string | undefined,
       customerType: customerType as string | undefined,
       paymentMethod: paymentMethod as string | undefined,
+      currency: currency as string | undefined,
       digitalService: digitalService as string | undefined,
     });
     const incomes = await prisma.incomeRecord.findMany({
@@ -698,6 +714,7 @@ router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next
       { header: 'Tipo de cliente', key: 'customerType', width: 18 },
       { header: 'Metodo de pago', key: 'paymentMethod', width: 18 },
       { header: 'Metodo (otro)', key: 'paymentMethodOther', width: 24 },
+      { header: 'Moneda', key: 'currency', width: 10 },
       { header: 'Servicio digital', key: 'digitalService', width: 28 },
       { header: 'Cantidad servicio', key: 'digitalService', width: 16 },
       { header: 'Recibido', key: 'receivedAmount', width: 14 },
@@ -710,6 +727,7 @@ router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next
         customerType: r.customerType,
         paymentMethod: r.paymentMethod,
         paymentMethodOther: r.paymentMethodOther ?? '',
+        currency: r.currency,
         digitalService: r.digitalService,
         receivedAmount: Number(r.receivedAmount),
         note: r.note ?? '',
@@ -729,12 +747,13 @@ router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next
 
 router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) => {
   try {
-    const { startDate, endDate, customerType, paymentMethod, digitalService } = req.query;
+    const { startDate, endDate, customerType, paymentMethod, currency, digitalService } = req.query;
     const where = buildIncomeWhere({
       startDate: startDate as string | undefined,
       endDate: endDate as string | undefined,
       customerType: customerType as string | undefined,
       paymentMethod: paymentMethod as string | undefined,
+      currency: currency as string | undefined,
       digitalService: digitalService as string | undefined,
     });
     const incomes = await prisma.incomeRecord.findMany({
@@ -755,7 +774,14 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
     doc.pipe(res);
 
     const totalQuantity = incomes.reduce((s, x) => s + Number(x.digitalService), 0);
-    const totalReceived = incomes.reduce((s, x) => s + Number(x.receivedAmount), 0);
+    const totalByCurrency = new Map<CurrencyCode, number>();
+    for (const x of incomes) {
+      const c = x.currency as CurrencyCode;
+      totalByCurrency.set(c, (totalByCurrency.get(c) ?? 0) + Number(x.receivedAmount));
+    }
+    const totalsLine = Array.from(totalByCurrency.entries())
+      .map(([c, n]) => formatCurrencyAmount(n, c))
+      .join(' · ');
 
     const brand = '#0f766e';
     const brandLight = '#ecfdf5';
@@ -793,7 +819,7 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
     doc.strokeColor(brand).lineWidth(1).rect(M, rowY, tableW, 36).stroke();
     doc.fillColor(brand).font('Helvetica-Bold').fontSize(10);
     doc.text(`Servicios digitales: ${totalQuantity.toLocaleString('es-CO')}`, M + 12, rowY + 12);
-    doc.text(`Total recibido: ${formatCurrencyAmount(totalReceived, 'COP')}`, M + 260, rowY + 12);
+    doc.text(`Total recibido: ${totalsLine || '—'}`, M + 260, rowY + 12);
     doc.restore();
     rowY += 50;
 
@@ -803,7 +829,8 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
       { w: 108, h: 'Método pago' },
       { w: 112, h: 'Servicio digital' },
       { w: 88, h: 'Cantidad' },
-      { w: 96, h: 'Recibido' },
+      { w: 58, h: 'Mon.' },
+      { w: 86, h: 'Recibido' },
       { w: 100, h: 'Registrado por' },
     ];
 
@@ -854,7 +881,8 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
         pdfEscape(method, 24),
         pdfEscape(r.digitalService, 26),
         Number(r.digitalService).toLocaleString('es-CO'),
-        formatCurrencyAmount(Number(r.receivedAmount), 'COP'),
+        r.currency,
+        formatCurrencyAmount(Number(r.receivedAmount), r.currency as CurrencyCode),
         pdfEscape(r.createdBy.name, 24),
       ];
 
