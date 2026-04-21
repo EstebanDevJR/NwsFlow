@@ -8,7 +8,7 @@ import { ChevronLeft, ChevronRight, FileSpreadsheet, FileText, Filter, Loader2, 
 import { useReports, useIncomeReports, type IncomeCurrency, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { downloadReportFile } from '@/lib/reportDownload';
-import { cn } from '@/lib/utils';
+import { cn, formatShortDate } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -25,15 +25,6 @@ import { formatCurrencyAmount, paymentMethodLabel, type CurrencyCode } from '@pa
 type ReportMode = 'solicitudes' | 'pagos' | 'ingresos';
 
 const PREVIEW_PAGE_SIZE = 50;
-
-function formatShortDate(iso: string | undefined | null) {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('es', { day: '2-digit', month: 'short', year: 'numeric' });
-  } catch {
-    return '—';
-  }
-}
 
 function statusLabel(s: RequestStatus): string {
   switch (s) {
@@ -449,7 +440,10 @@ export function Reports() {
                 {reports.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
-                      {formatShortDate((r as any).date ?? r.createdAt)}
+                      {formatShortDate(
+                        (r as any).date ?? r.createdAt,
+                        isIncomeMode && (r as any).date ? { utcCalendar: true } : undefined
+                      )}
                     </TableCell>
                     {mode === 'pagos' && (
                       <TableCell className="text-muted-foreground whitespace-nowrap text-xs">
@@ -767,7 +761,7 @@ export function Reports() {
               ) : (
                 incomeTimeline.slice(-8).map((row) => (
                   <div key={row.bucket} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 rounded-md border border-border/50 px-3 py-2">
-                    <span className="text-sm text-muted-foreground">{formatShortDate(row.bucket)}</span>
+                    <span className="text-sm text-muted-foreground">{formatShortDate(row.bucket, { utcCalendar: true })}</span>
                     <span className="text-sm tabular-nums">{Number(row.quantityTotal).toLocaleString('es-CO')}</span>
                     <span className="text-sm tabular-nums font-medium">
                       {incomeCurrency

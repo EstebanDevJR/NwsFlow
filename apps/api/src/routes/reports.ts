@@ -723,7 +723,7 @@ router.get('/incomes/export/excel', requireRole('HOLDER'), async (req, res, next
     ];
     for (const r of incomes) {
       sheet.addRow({
-        date: r.date.toISOString(),
+        date: r.date.toLocaleDateString('es-CO', { timeZone: 'UTC' }),
         customerType: r.customerType,
         paymentMethod: r.paymentMethod,
         paymentMethodOther: r.paymentMethodOther ?? '',
@@ -876,7 +876,7 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
         ? `OTRO (${pdfEscape(r.paymentMethodOther, 18)})`
         : r.paymentMethod;
       const cells = [
-        r.date.toLocaleDateString('es-CO'),
+        r.date.toLocaleDateString('es-CO', { timeZone: 'UTC' }),
         r.customerType,
         pdfEscape(method, 24),
         pdfEscape(r.digitalService, 26),
@@ -905,7 +905,7 @@ router.get('/incomes/export/pdf', requireRole('HOLDER'), async (req, res, next) 
       for (const r of incomes) {
         if (!r.note?.trim()) continue;
         ensureSpace(14);
-        const noteLine = `${r.date.toLocaleDateString('es-CO')} · ${r.customerType}: ${pdfEscape(r.note, 140)}`;
+        const noteLine = `${r.date.toLocaleDateString('es-CO', { timeZone: 'UTC' })} · ${r.customerType}: ${pdfEscape(r.note, 140)}`;
         doc.text(noteLine, M, rowY, { width: tableW });
         rowY += 12;
       }

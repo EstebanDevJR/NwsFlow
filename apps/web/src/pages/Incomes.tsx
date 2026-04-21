@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
 import { useCreateIncome, useIncomes, useIncomeSummary, type IncomeCurrency, type IncomeCustomerType, type IncomePaymentMethod } from '@/hooks/useApi';
+import { formatCalendarDateFromIso } from '@/lib/utils';
 import { formatCurrencyAmount, type CurrencyCode } from '@paymentflow/shared';
 import { Loader2 } from 'lucide-react';
 
@@ -23,6 +24,36 @@ const customerTypeLabel: Record<IncomeCustomerType, string> = {
   RICACHON: 'Ricachon',
 };
 
+function parseIncomeAmount(rawInput: string, currency: IncomeCurrency): number | null {
+  const raw = rawInput.trim().replace(/\s+/g, '');
+  if (!raw) return null;
+
+  if (currency === 'COP') {
+    if (/^\d+$/.test(raw)) return Number(raw);
+    if (/^\d{1,3}([.,]\d{3})+$/.test(raw)) return Number(raw.replace(/[.,]/g, ''));
+    if (/^\d+[.,]00$/.test(raw)) return Number(raw.split(/[.,]/)[0]);
+    return null;
+  }
+
+  const lastComma = raw.lastIndexOf(',');
+  const lastDot = raw.lastIndexOf('.');
+  const decimalPos = Math.max(lastComma, lastDot);
+  let normalized = raw;
+
+  if (decimalPos >= 0) {
+    const intPart = raw.slice(0, decimalPos).replace(/[.,]/g, '');
+    const fracPart = raw.slice(decimalPos + 1).replace(/[.,]/g, '');
+    if (!intPart || !fracPart) return null;
+    normalized = `${intPart}.${fracPart}`;
+  } else {
+    normalized = raw.replace(/[.,]/g, '');
+  }
+
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
 export function Incomes() {
   const [date, setDate] = useState('');
   const [customerType, setCustomerType] = useState<IncomeCustomerType>('CLIENTE');
@@ -32,6 +63,7 @@ export function Incomes() {
   const [digitalService, setDigitalService] = useState('');
   const [receivedAmount, setReceivedAmount] = useState('');
   const [note, setNote] = useState('');
+  const [formError, setFormError] = useState('');
 
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -56,22 +88,56 @@ export function Incomes() {
   const createIncome = useCreateIncome();
 
   const submit = async () => {
-    if (!date || !digitalService.trim() || !receivedAmount) return;
-    await createIncome.mutateAsync({
-      date: new Date(date).toISOString(),
-      customerType,
-      paymentMethod,
-      paymentMethodOther: paymentMethod === 'OTRO' ? paymentMethodOther.trim() : undefined,
-      currency,
-      digitalService: digitalService.trim(),
-      receivedAmount: Number(receivedAmount),
-      note: note.trim() || undefined,
-    });
-    setDate('');
-    setDigitalService('');
-    setReceivedAmount('');
-    setPaymentMethodOther('');
-    setNote('');
+    setFormError('');
+    if (!date) {
+      setFormError('Selecciona una fecha para registrar el ingreso.');
+      return;
+    }
+    if (!digitalService.trim()) {
+      setFormError('Indica la cantidad de servicio digital prestado.');
+      return;
+    }
+    if (!String(receivedAmount).trim()) {
+      setFormError('Indica el total recibido.');
+      return;
+    }
+    if (paymentMethod === 'OTRO' && !paymentMethodOther.trim()) {
+      setFormError('Indica qué método de pago usaste al elegir «Otros».');
+      return;
+    }
+    const qty = digitalService.trim();
+    if (!/^\d+(\.\d+)?$/.test(qty)) {
+      setFormError('La cantidad de servicio digital debe ser un número (ej. 1000 o 10.5).');
+      return;
+    }
+    const amountParsed = parseIncomeAmount(receivedAmount, currency);
+    if (amountParsed == null) {
+      setFormError(
+        currency === 'COP'
+          ? 'Para COP usa número entero (ej. 26000 o 26.000).'
+          : 'El total recibido no es un número válido.'
+      );
+      return;
+    }
+    try {
+      await createIncome.mutateAsync({
+        date: new Date(date).toISOString(),
+        customerType,
+        paymentMethod,
+        paymentMethodOther: paymentMethod === 'OTRO' ? paymentMethodOther.trim() : undefined,
+        currency,
+        digitalService: qty,
+        receivedAmount: amountParsed,
+        note: note.trim() || undefined,
+      });
+      setDate('');
+      setDigitalService('');
+      setReceivedAmount('');
+      setPaymentMethodOther('');
+      setNote('');
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'No se pudo guardar el ingreso.');
+    }
   };
 
   const totalQuantity = summaryRes?.totals.quantityTotal ?? 0;
@@ -100,7 +166,14 @@ export function Incomes() {
             <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
                 <Label>Fecha</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => {
+                    setDate(e.target.value);
+                    if (formError) setFormError('');
+                  }}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Tipo de cliente</Label>
@@ -134,7 +207,10 @@ export function Incomes() {
                   step="1"
                   placeholder="Ej. 1000"
                   value={digitalService}
-                  onChange={(e) => setDigitalService(e.target.value)}
+                  onChange={(e) => {
+                    setDigitalService(e.target.value);
+                    if (formError) setFormError('');
+                  }}
                 />
               </div>
             </div>
@@ -153,18 +229,27 @@ export function Incomes() {
               <div className="space-y-1.5">
                 <Label>Total recibido</Label>
                 <Input
-                  type="number"
-                  min="0"
-                  step={currency === 'COP' ? '1' : '0.01'}
-                  placeholder={currency === 'COP' ? '1000' : '0.00'}
+                  type="text"
+                  inputMode={currency === 'COP' ? 'numeric' : 'decimal'}
+                  placeholder={currency === 'COP' ? 'Ej. 26000 o 26.000' : 'Ej. 1500.50 o 1.500,50'}
                   value={receivedAmount}
-                  onChange={(e) => setReceivedAmount(e.target.value)}
+                  onChange={(e) => {
+                    setReceivedAmount(e.target.value);
+                    if (formError) setFormError('');
+                  }}
                 />
               </div>
               {paymentMethod === 'OTRO' && (
                 <div className="space-y-1.5">
                   <Label>Especifica cuál método</Label>
-                  <Input placeholder="Ej. Binance, efectivo, etc." value={paymentMethodOther} onChange={(e) => setPaymentMethodOther(e.target.value)} />
+                  <Input
+                    placeholder="Ej. Binance, efectivo, etc."
+                    value={paymentMethodOther}
+                    onChange={(e) => {
+                      setPaymentMethodOther(e.target.value);
+                      if (formError) setFormError('');
+                    }}
+                  />
                 </div>
               )}
             </div>
@@ -179,7 +264,12 @@ export function Incomes() {
               />
             </div>
           </div>
-          <Button onClick={submit} disabled={createIncome.isPending}>
+          {formError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {formError}
+            </p>
+          ) : null}
+          <Button onClick={() => void submit()} disabled={createIncome.isPending}>
             {createIncome.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Guardar ingreso
           </Button>
@@ -293,7 +383,7 @@ export function Incomes() {
               <TableBody>
                 {(incomesRes?.data ?? []).map((r) => (
                   <TableRow key={r.id}>
-                    <TableCell>{new Date(r.date).toLocaleDateString('es-CO')}</TableCell>
+                    <TableCell>{formatCalendarDateFromIso(r.date)}</TableCell>
                     <TableCell>{customerTypeLabel[r.customerType]}</TableCell>
                     <TableCell>{paymentMethodLabel[r.paymentMethod]}{r.paymentMethod === 'OTRO' && r.paymentMethodOther ? ` (${r.paymentMethodOther})` : ''}</TableCell>
                     <TableCell>{r.digitalService}</TableCell>

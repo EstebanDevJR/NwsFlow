@@ -14,9 +14,11 @@ const createIncomeSchema = z
     paymentMethodOther: z.string().trim().max(120).optional(),
     currency: z.enum(['COP', 'USD']).default('COP'),
     digitalService: z
-      .string()
-      .trim()
-      .regex(/^\d+(\.\d+)?$/, 'La cantidad de servicio digital debe ser numérica'),
+      .union([z.string(), z.number()])
+      .transform((val) => (typeof val === 'number' && Number.isFinite(val) ? String(val) : String(val ?? '').trim()))
+      .pipe(
+        z.string().regex(/^\d+(\.\d+)?$/, 'La cantidad de servicio digital debe ser numérica'),
+      ),
     receivedAmount: z.coerce.number().nonnegative(),
     note: z.string().trim().max(4000).optional(),
   })
